@@ -4,6 +4,10 @@ import * as models from '../models/index.js';
 export const createUser = async (req, res) => {
     const { username, password, role, name, sectionId } = req.body;
 
+    if (!username || !password || !name) {
+        return res.status(400).json({ error: "ID Number, Name, and Password are required fields" });
+    }
+
     try {
         // 1. Check if user already exists
         const userExists = await User.findOne({ username });
@@ -15,21 +19,17 @@ export const createUser = async (req, res) => {
 
         // 2. Create the Domain Entity (Student or Teacher)
         if (role === 'student') {
-            if (!name || !sectionId) return res.status(400).json({ error: "Name and Section are required for students" });
-            
             const student = await models.Student.create({
                 name,
                 rollNumber: username,
-                sectionId
+                sectionId: sectionId || null
             });
             newProfileId = student._id;
         } 
         else if (role === 'prof') {
-            if (!name) return res.status(400).json({ error: "Name is required for professors" });
-            
             const teacher = await models.Teacher.create({
                 name,
-                maxHoursPerWeek: 20 // Default
+                maxHoursPerWeek: req.body.maxHoursPerWeek ? Number(req.body.maxHoursPerWeek) : 20
             });
             newProfileId = teacher._id;
         } 
