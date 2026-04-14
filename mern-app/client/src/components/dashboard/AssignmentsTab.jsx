@@ -76,7 +76,7 @@ export const AssignmentsTab = () => {
                         </select>
                     </div>
 
-                    {selectedCourse?.theoryHours > 0 && (
+                    {selectedCourse?.theoryTotal > 0 && (
                         <div className="input-group">
                             <label className="input-label">Theory Teacher(s)</label>
                             <select className="input-field" multiple value={aForm.theoryTeacherIds}
@@ -88,7 +88,7 @@ export const AssignmentsTab = () => {
                         </div>
                     )}
 
-                    {selectedCourse?.labHours > 0 && (
+                    {selectedCourse?.labTotal > 0 && (
                         <div className="input-group">
                             <label className="input-label">Lab Teacher(s)</label>
                             <select className="input-field" multiple value={aForm.labTeacherIds}

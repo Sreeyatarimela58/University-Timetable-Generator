@@ -21,22 +21,22 @@ const courseSchema = new mongoose.Schema({
         trim: true,
         unique: true
     },
-    theoryHours: {
+    // New Session Builder Schema
+    theoryTotal: {
         type: Number,
         default: 0
     },
-    labHours: {
+    theorySessions: [{
+        type: Number
+    }],
+    labTotal: {
         type: Number,
         default: 0
     },
-    theoryConsecutive: {
-        type: Number,
-        default: 1
-    },
-    labConsecutive: {
-        type: Number,
-        default: 2
-    }
+    labSessions: [{
+        type: Number
+    }]
 }, { timestamps: true });
 
+// Validation helper could be added here, but we'll enforce it in the controller/frontend
 export const Course = mongoose.model('Course', courseSchema);

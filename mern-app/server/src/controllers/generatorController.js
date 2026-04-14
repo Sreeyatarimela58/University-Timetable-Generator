@@ -11,7 +11,7 @@ export const generateDrafts = async (req, res) => {
     isGenerating = true;
 
     try {
-        console.log('Starting draft generation with Unified Courses...');
+        console.log('Starting draft generation with Dynamic Session Builder...');
 
         const teachers    = await models.Teacher.find();
         const rooms       = await models.Room.find();
@@ -29,64 +29,85 @@ export const generateDrafts = async (req, res) => {
         rooms.forEach(r => facts += `room(id_${r._id}, ${r.type}, ${r.capacity}).\n`);
         sections.forEach(s => facts += `section(id_${s._id}, ${s.strength}).\n`);
         
+        // Fact Expansion for Sessions
         courses.forEach(c => {
-            if (c.theoryHours > 0) 
-                facts += `course(id_${c._id}_T, theory, ${c.theoryHours}, ${c.theoryConsecutive || 1}).\n`;
-            if (c.labHours > 0) 
-                facts += `course(id_${c._id}_L, lab, ${c.labHours}, ${c.labConsecutive || 2}).\n`;
+            if (c.theorySessions?.length) {
+                c.theorySessions.forEach((duration, i) => {
+                    facts += `course(id_${c._id}_T_${i}, theory, ${duration}, ${duration}).\n`;
+                });
+            }
+            if (c.labSessions?.length) {
+                c.labSessions.forEach((duration, i) => {
+                    facts += `course(id_${c._id}_L_${i}, lab, ${duration}, ${duration}).\n`;
+                });
+            }
         });
 
         assignments.forEach(a => {
-            const c = courses.find(course => course._id.toString() === a.courseId.toString());
-            if (!c) return;
-            if (c.theoryHours > 0 && a.theoryTeacherIds?.length) {
-                facts += `section_course(id_${a.sectionId}, id_${c._id}_T).\n`;
-                facts += `allowed_teachers(id_${c._id}_T, id_${a.sectionId}, [${a.theoryTeacherIds.map(id => `id_${id}`).join(', ')}]).\n`;
+            const course = courses.find(c => c._id.toString() === a.courseId.toString());
+            if (!course) return;
+
+            // Theory Sessions Mappings
+            if (course.theorySessions?.length && a.theoryTeacherIds?.length) {
+                course.theorySessions.forEach((_, i) => {
+                    const subId = `id_${course._id}_T_${i}`;
+                    facts += `section_course(id_${a.sectionId}, ${subId}).\n`;
+                    facts += `allowed_teachers(${subId}, id_${a.sectionId}, [${a.theoryTeacherIds.map(id => `id_${id}`).join(', ')}]).\n`;
+                });
             }
-            if (c.labHours > 0 && a.labTeacherIds?.length) {
-                facts += `section_course(id_${a.sectionId}, id_${c._id}_L).\n`;
-                facts += `allowed_teachers(id_${c._id}_L, id_${a.sectionId}, [${a.labTeacherIds.map(id => `id_${id}`).join(', ')}]).\n`;
+
+            // Lab Sessions Mappings
+            if (course.labSessions?.length && a.labTeacherIds?.length) {
+                course.labSessions.forEach((_, i) => {
+                    const subId = `id_${course._id}_L_${i}`;
+                    facts += `section_course(id_${a.sectionId}, ${subId}).\n`;
+                    facts += `allowed_teachers(${subId}, id_${a.sectionId}, [${a.labTeacherIds.map(id => `id_${id}`).join(', ')}]).\n`;
+                });
             }
         });
 
+        // Unavailability
         teachers.forEach(t => t.unavailableSlots?.forEach(s => facts += `unavailable(id_${t._id}, ${s.day}, ${s.slot}).\n`));
-        facts += 'day(mon). day(tue). day(wed). day(thu). day(fri).\nslot(1). slot(2). slot(3). slot(4). slot(5). slot(6). slot(7). slot(8).\n';
+        
+        facts += '\n% The Grid\n';
+        facts += 'day(mon). day(tue). day(wed). day(thu). day(fri).\n';
+        facts += 'slot(1). slot(2). slot(3). slot(4). slot(5). slot(6). slot(7). slot(8).\n';
 
         // 2. Execute solver
+        console.log('Executing solver...');
         const engineResponse = await executePrologSolver(facts);
 
         if (!engineResponse || !engineResponse.drafts) {
-            throw new Error('Solver failed to return status.');
+            throw new Error('Solver failed to return valid JSON.');
         }
 
-        // 3. Map back to Human-Readable and DB objects
+        // 3. Result Parsing (Mapping back to original CID and component)
         const cleanDrafts = engineResponse.drafts.map(draft => ({
             score: draft.score,
             timetable: draft.timetable.map(entry => {
-                const isTheory = entry.courseId.endsWith('_T');
-                const isLab = entry.courseId.endsWith('_L');
-                const cid = entry.courseId.replace('id_', '').replace('_T', '').replace('_L', '');
-                const sid = entry.sectionId.replace('id_', '');
-                const tid = entry.teacherId.replace('id_', '');
-                const rid = entry.roomId.replace('id_', '');
-
+                // Example rawId: id_123_T_0 or id_123_L_1
+                const parts = entry.courseId.split('_');
+                // parts[0] = id, parts[1] = CID, parts[2] = T/L, parts[3] = index
+                const cid = parts[1];
+                const componentCode = parts[2];
+                
                 const course = courses.find(c => c._id.toString() === cid);
-                const teacher = teachers.find(t => t._id.toString() === tid);
-                const section = sections.find(s => s._id.toString() === sid);
-                const room = rooms.find(r => r._id.toString() === rid);
+                const teacher = teachers.find(t => t._id.toString() === entry.teacherId.replace('id_', ''));
+                const section = sections.find(s => s._id.toString() === entry.sectionId.replace('id_', ''));
+                const room    = rooms.find(r => r._id.toString() === entry.roomId.replace('id_', ''));
 
                 return {
-                    sectionId: sid,
-                    sectionName: section?.name || sid,
+                    sectionId: entry.sectionId.replace('id_', ''),
+                    sectionName: section?.name || 'Unknown',
                     courseId: cid,
-                    courseName: course?.name || cid,
-                    teacherId: tid,
-                    teacherName: teacher?.name || tid,
-                    roomId: rid,
-                    roomName: room?.name || rid,
+                    courseName: course?.name || 'Unknown',
+                    teacherId: entry.teacherId.replace('id_', ''),
+                    teacherName: teacher?.name || 'Unknown',
+                    roomId: entry.roomId.replace('id_', ''),
+                    roomName: room?.name || 'Unknown',
                     day: entry.day,
                     slot: entry.slot,
-                    component: isLab ? 'lab' : 'theory'
+                    component: componentCode === 'T' ? 'theory' : 'lab'
                 };
             })
         }));
