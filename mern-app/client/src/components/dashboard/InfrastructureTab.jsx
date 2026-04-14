@@ -21,6 +21,8 @@ export const InfrastructureTab = () => {
         labSessions: [] 
     });
 
+    const [slotErrors, setSlotErrors] = useState({ theory: '', lab: '' });
+
     const load = async () => {
         try {
             const [s, r, c] = await Promise.all([
@@ -78,17 +80,37 @@ export const InfrastructureTab = () => {
         const total = type === 'theory' ? cForm.theoryTotal : cForm.labTotal;
         const currentArr = type === 'theory' ? cForm.theorySessions : cForm.labSessions;
         
+        // Calculate mathematical limits
+        const minRequired = total > 0 ? Math.ceil(total / 2) : 0;
+        const maxAllowed = total;
+
+        // Reset errors
+        setSlotErrors(prev => ({ ...prev, [type]: '' }));
+
+        // Keyboard/Manual Entry Validation
+        if (count < minRequired && count !== 0) {
+            setSlotErrors(prev => ({ ...prev, [type]: `Min: ${minRequired} slots required` }));
+            // We still update to show what they typed, but validation keeps it from saving
+        } else if (count > maxAllowed) {
+            setSlotErrors(prev => ({ ...prev, [type]: `Max: ${maxAllowed} slots allowed` }));
+        }
+
         let newArr = [...currentArr];
-        if (count > currentArr.length) {
-            // Add slots (default to 1)
-            for (let i = currentArr.length; i < count; i++) newArr.push(1);
+        // Only update the actual session array if the count is valid
+        if (count >= minRequired && count <= maxAllowed) {
+            const safeCount = Math.min(count, 20); 
+            if (safeCount > currentArr.length) {
+                for (let i = currentArr.length; i < safeCount; i++) newArr.push(1);
+            } else {
+                newArr = newArr.slice(0, safeCount);
+            }
         } else {
-            // Remove slots
-            newArr = newArr.slice(0, count);
+            // Keep existing array or clear it if you want to hide boxes during error
+            newArr = []; 
         }
         
-        if (type === 'theory') setCForm({ ...cForm, theorySessions: newArr });
-        else setCForm({ ...cForm, labSessions: newArr });
+        if (type === 'theory') setCForm({ ...cForm, theorySessions: newArr, theoryTotal: total });
+        else setCForm({ ...cForm, labSessions: newArr, labTotal: total });
     };
 
     const updateSessionVal = (type, index, val) => {
@@ -191,8 +213,11 @@ export const InfrastructureTab = () => {
                             </div>
                             <div className="input-group" style={{ width: '120px' }}>
                                 <label className="input-label">No. of Slots</label>
-                                <input className="input-field" type="number" min="0" max={cForm.theoryTotal} value={cForm.theorySessions.length}
+                                <input className="input-field" type="number" 
+                                    min={cForm.theoryTotal > 0 ? Math.ceil(cForm.theoryTotal / 2) : 0} 
+                                    max={cForm.theoryTotal} value={cForm.theorySessions.length}
                                     onChange={e => handleSessionCountChange('theory', Number(e.target.value))} />
+                                {slotErrors.theory && <span className="error-text" style={{ fontSize: '0.7rem', color: 'var(--danger)' }}>{slotErrors.theory}</span>}
                             </div>
                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
                                 {cForm.theorySessions.map((dur, i) => (
@@ -217,8 +242,11 @@ export const InfrastructureTab = () => {
                             </div>
                             <div className="input-group" style={{ width: '120px' }}>
                                 <label className="input-label">No. of Slots</label>
-                                <input className="input-field" type="number" min="0" value={cForm.labSessions.length}
+                                <input className="input-field" type="number" 
+                                    min={cForm.labTotal > 0 ? Math.ceil(cForm.labTotal / 2) : 0} 
+                                    max={cForm.labTotal} value={cForm.labSessions.length}
                                     onChange={e => handleSessionCountChange('lab', Number(e.target.value))} />
+                                {slotErrors.lab && <span className="error-text" style={{ fontSize: '0.7rem', color: 'var(--danger)' }}>{slotErrors.lab}</span>}
                             </div>
                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
                                 {cForm.labSessions.map((dur, i) => (
