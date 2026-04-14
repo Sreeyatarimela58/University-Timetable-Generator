@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import api from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import './TimetableGrid.css';
 
 const days = ['mon', 'tue', 'wed', 'thu', 'fri'];
 const times = ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00']; // 8 Slots
 
 export const TimetableGrid = ({ sectionId }) => {
+  const { user } = useAuth();
   const [scheduleData, setScheduleData] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -16,8 +18,24 @@ export const TimetableGrid = ({ sectionId }) => {
     // Ideally this queries `/api/timetables?sectionId=...`
     // We fetch all for demo purposes
     api.get('/timetables').then(res => {
-      // filters
-      const data = sectionId ? res.data.filter(t => t.sectionId === sectionId) : res.data;
+      // filters applying strict RBAC scoped contexts
+      let data = res.data;
+      
+      // If prop passed (e.g. from admin dropdown later), respect it
+      if(sectionId) {
+          data = data.filter(t => t.sectionId === sectionId);
+      } else if (user) {
+          // If no manual prop, lock to role specific scopes
+          if(user.role === 'student' && user.profileId) {
+              // Usually the ID stored is the 24 hex mongoose id. We strip id_ during generation.
+              const cleanId = user.profileId.replace('id_','');
+              data = data.filter(t => t.sectionId === cleanId || t.sectionId === user.profileId);
+          } else if (user.role === 'prof' && user.profileId) {
+              const cleanId = user.profileId.replace('id_','');
+              data = data.filter(t => t.teacherId === cleanId || t.teacherId === user.profileId);
+          }
+      }
+
       setScheduleData(data);
       setLoading(false);
     }).catch(err => {

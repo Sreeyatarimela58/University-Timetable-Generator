@@ -1,11 +1,18 @@
 import React, { useState } from 'react';
 import api from '../api/client';
-import { Play, Settings2, Database } from 'lucide-react';
+import { Play, Settings2, Database, UserPlus } from 'lucide-react';
 
 export const Dashboard = () => {
     const [generating, setGenerating] = useState(false);
     const [message, setMessage] = useState('');
     const [error, setError] = useState('');
+    
+    // User Provisioning State
+    const [uName, setUName] = useState('');
+    const [uPass, setUPass] = useState('');
+    const [uRole, setURole] = useState('student');
+    const [uProfileId, setUProfileId] = useState('');
+    const [uMessage, setUMessage] = useState('');
 
     const handleGenerate = async () => {
         setGenerating(true);
@@ -18,6 +25,18 @@ export const Dashboard = () => {
             setError(err.response?.data?.error || err.message);
         } finally {
             setGenerating(false);
+        }
+    };
+
+    const handleCreateUser = async (e) => {
+        e.preventDefault();
+        setUMessage('');
+        try {
+            await api.post('/users', { username: uName, password: uPass, role: uRole, profileId: uProfileId });
+            setUMessage('Account properly provisioned and linked to backend.');
+            setUName(''); setUPass(''); setUProfileId('');
+        } catch(err) {
+            setUMessage(err.response?.data?.error || 'Failed to provision account');
         }
     };
 
@@ -67,6 +86,29 @@ export const Dashboard = () => {
                         <span style={{ color: 'var(--brand-primary)', fontWeight: 'bold' }}>Ready</span>
                     </div>
                 </div>
+            </div>
+
+            {/* Account Provisioning Panel */}
+            <div className="glass-panel" style={{ gridColumn: '1 / -1' }}>
+                <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <UserPlus color="var(--brand-primary)" />
+                    Account Provisioning Gateway
+                </h2>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
+                    Strictly bind system credentials to established `Teacher` or `Section` MongoDB Records (Profile IDs).
+                </p>
+                <form onSubmit={handleCreateUser} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                     <input className="input-field" placeholder="Target Username" value={uName} onChange={e=>setUName(e.target.value)} required />
+                     <input className="input-field" placeholder="Target Password" type="password" value={uPass} onChange={e=>setUPass(e.target.value)} required />
+                     <select className="input-field" value={uRole} onChange={e=>setURole(e.target.value)}>
+                         <option value="student">Student Account (Links to Section ID)</option>
+                         <option value="prof">Professor Account (Links to Teacher ID)</option>
+                     </select>
+                     <input className="input-field" placeholder="Mongo ObjectID profile reference (e.g. 64b8f...)" value={uProfileId} onChange={e=>setUProfileId(e.target.value)} required />
+                     
+                     <button type="submit" className="btn btn-primary" style={{ gridColumn: '1 / -1' }}>Provision Network Credentials</button>
+                     {uMessage && <div style={{gridColumn:'1/-1', color: 'var(--brand-primary)'}}>{uMessage}</div>}
+                </form>
             </div>
         </div>
     );

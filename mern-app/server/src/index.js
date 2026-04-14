@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import apiRoutes from './routes/api.js';
+import { seedAdmin } from './controllers/authController.js';
 
 // Load environment variables
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -34,6 +35,9 @@ const connectDB = async () => {
         }
         await mongoose.connect(uri);
         console.log('MongoDB connection successful');
+        
+        // Seed default admin account
+        await seedAdmin();
         
         app.listen(PORT, () => {
             console.log(`Server running on port ${PORT}`);
