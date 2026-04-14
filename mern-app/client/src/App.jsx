@@ -1,13 +1,12 @@
 import React from 'react'
 import { Routes, Route, Link, Navigate } from 'react-router-dom'
-import { CalendarDays, Home, LayoutGrid, LogOut, ShieldCheck } from 'lucide-react'
+import { CalendarDays, Home, LayoutGrid, LogOut } from 'lucide-react'
 import { Dashboard } from './pages/Dashboard'
 import { TimetableGrid } from './components/TimetableGrid'
 import { Portal } from './pages/Portal'
 import { Login } from './pages/Login'
 import { AuthProvider, useAuth } from './context/AuthContext'
 
-// Layout Component
 const Layout = ({ children }) => {
   const { user, logout } = useAuth();
 
@@ -20,7 +19,7 @@ const Layout = ({ children }) => {
         </h1>
         
         {user && (
-            <nav style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <nav style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
               {user.role === 'admin' && (
                   <Link to="/admin" className="btn glass-panel" style={{ padding: '0.5rem 1rem' }}>
                     <Home size={18} /> Admin Console
@@ -28,10 +27,10 @@ const Layout = ({ children }) => {
               )}
               
               <Link to="/timetable" className="btn btn-primary" style={{ padding: '0.5rem 1rem' }}>
-                <LayoutGrid size={18} /> {user.role === 'admin' ? 'Global Grid' : 'My Schedule'}
+                <LayoutGrid size={18} /> {user.role === 'admin' ? 'Published Grid' : 'My Schedule'}
               </Link>
 
-              <button onClick={logout} className="btn" style={{ padding: '0.5rem 1rem', background: 'transparent', color: 'var(--text-muted)' }}>
+              <button onClick={logout} className="btn" style={{ padding: '0.5rem 1rem', background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
                 <LogOut size={18} /> Logout
               </button>
             </nav>
@@ -62,7 +61,6 @@ const BaseRoutes = () => {
         {user.role === 'admin' && <Route path="/admin" element={<Dashboard />} />}
         <Route path="/timetable" element={<TimetableGrid />} />
         
-        {/* Default logic for authenticated users */}
         <Route path="/" element={<Navigate to={user.role === 'admin' ? "/admin" : "/timetable"} />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>

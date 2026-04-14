@@ -15,25 +15,21 @@ export const TimetableGrid = ({ sectionId }) => {
   // Actually CSS grid is easier if we map by Row (Slot) then columns (Days)
   
   useEffect(() => {
-    // Ideally this queries `/api/timetables?sectionId=...`
-    // We fetch all for demo purposes
     api.get('/timetables').then(res => {
-      // filters applying strict RBAC scoped contexts
       let data = res.data;
       
-      // If prop passed (e.g. from admin dropdown later), respect it
       if(sectionId) {
+          // Explicit prop override (e.g. admin picking a section)
           data = data.filter(t => t.sectionId === sectionId);
       } else if (user) {
-          // If no manual prop, lock to role specific scopes
-          if(user.role === 'student' && user.profileId) {
-              // Usually the ID stored is the 24 hex mongoose id. We strip id_ during generation.
-              const cleanId = user.profileId.replace('id_','');
-              data = data.filter(t => t.sectionId === cleanId || t.sectionId === user.profileId);
+          if(user.role === 'student' && user.sectionId) {
+              // Student → filter by their assigned section (resolved at login from Student record)
+              data = data.filter(t => t.sectionId === user.sectionId);
           } else if (user.role === 'prof' && user.profileId) {
-              const cleanId = user.profileId.replace('id_','');
-              data = data.filter(t => t.teacherId === cleanId || t.teacherId === user.profileId);
+              // Professor → filter by their teacher ID
+              data = data.filter(t => t.teacherId === user.profileId);
           }
+          // Admin sees everything (no filter)
       }
 
       setScheduleData(data);

@@ -18,6 +18,14 @@
   justify-content: center;
 }
 
+.grid-header.corner-cell,
+.grid-header.time-cell {
+  background: rgba(15, 23, 42, 0.4);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
 .grid-time-label {
   background: rgba(15, 23, 42, 0.4);
   color: var(--text-muted);
@@ -48,7 +56,9 @@
   border-color: var(--brand-primary);
 }
 
-.grid-cell.lunch-break {
+/* Lunch slot */
+.grid-cell.lunch-break,
+.grid-cell.lunch-cell {
   background: rgba(245, 158, 11, 0.1);
   border-color: rgba(245, 158, 11, 0.3);
   color: var(--warning);
@@ -57,6 +67,37 @@
   letter-spacing: 2px;
 }
 
+/* Filled assignment */
+.grid-cell.filled-cell {
+  background: rgba(59, 130, 246, 0.08);
+  border-color: rgba(59, 130, 246, 0.25);
+}
+
+.cell-course {
+  background: var(--brand-primary);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+  align-self: flex-start;
+}
+
+.cell-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Empty slot */
+.grid-cell.empty-cell,
+.grid-cell.empty {
+  color: var(--text-muted);
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+/* Published grid badges */
 .course-badge {
   background: var(--brand-primary);
   color: white;
@@ -76,4 +117,9 @@
 
 .cell-info strong {
   color: var(--text-primary);
+}
+
+.grid-cell.occupied {
+  background: rgba(59, 130, 246, 0.08);
+  border-color: rgba(59, 130, 246, 0.25);
 }

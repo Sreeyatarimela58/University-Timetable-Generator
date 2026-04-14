@@ -8,6 +8,7 @@ const getModel = (entityName) => {
         sections: models.Section,
         rooms: models.Room,
         teachers: models.Teacher,
+        students: models.Student,
         courses: models.Course,
         courseassignments: models.CourseAssignment,
         timetables: models.Timetable
