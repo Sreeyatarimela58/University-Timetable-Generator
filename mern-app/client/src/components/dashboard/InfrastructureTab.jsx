@@ -15,7 +15,7 @@ export const InfrastructureTab = () => {
     const [pForm, setPForm] = useState({ name: '', durationYears: 4 });
     const [sForm, setSForm] = useState({ yearId: '', name: '', strength: 60 });
     const [sFilters, setSFilters] = useState({ programId: '' }); 
-    const [rForm, setRForm] = useState({ name: '', type: 'lecture', capacity: 60 });
+    const [rForm, setRForm] = useState({ name: '', type: 'classroom', capacity: 60 });
     const [cForm, setCForm] = useState({ name: '', code: '', theoryTotal: 3, theorySessions: [2, 1], labTotal: 0, labSessions: [] });
     const [slotErrors, setSlotErrors] = useState({ theory: '', lab: '' });
 
@@ -139,7 +139,10 @@ export const InfrastructureTab = () => {
                                 <span className="hint-text">{p.durationYears} Year Program</span>
                             </div>
                             <div style={{ padding: '0.75rem', paddingTop: 0, display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                {academicYears.filter(y => y.programId?._id === p._id).map(y => (
+                                {academicYears.filter(y => {
+                                    const progId = typeof y.programId === 'object' ? y.programId?._id : y.programId;
+                                    return progId === p._id;
+                                }).map(y => (
                                     <span key={y._id} className="chip" style={{ cursor: 'default' }}>Year {y.yearNumber}</span>
                                 ))}
                             </div>
@@ -163,7 +166,10 @@ export const InfrastructureTab = () => {
                         <label className="input-label">Select Year</label>
                         <select className="input-field" value={sForm.yearId} onChange={e => setSForm({ ...sForm, yearId: e.target.value })} disabled={!sFilters.programId}>
                             <option value="">— Choose —</option>
-                            {academicYears.filter(y => y.programId?._id === sFilters.programId).map(y => (
+                            {academicYears.filter(y => {
+                                const progId = typeof y.programId === 'object' ? y.programId?._id : y.programId;
+                                return progId === sFilters.programId;
+                            }).map(y => (
                                 <option key={y._id} value={y._id}>Year {y.yearNumber}</option>
                             ))}
                         </select>
@@ -223,7 +229,7 @@ export const InfrastructureTab = () => {
                     <div className="input-group">
                         <label className="input-label">Type</label>
                         <select className="input-field" value={rForm.type} onChange={e => setRForm({ ...rForm, type: e.target.value })}>
-                            <option value="lecture">Lecture Hall</option>
+                            <option value="classroom">Lecture Hall</option>
                             <option value="lab">Laboratory</option>
                         </select>
                     </div>
@@ -233,7 +239,7 @@ export const InfrastructureTab = () => {
                             onChange={e => setRForm({ ...rForm, capacity: Number(e.target.value) })} />
                     </div>
                     <button className="btn btn-primary" onClick={() => 
-                        addEntity('rooms', rForm, () => setRForm({ name: '', type: 'lecture', capacity: 60 }))}>
+                        addEntity('rooms', rForm, () => setRForm({ name: '', type: 'classroom', capacity: 60 }))}>
                         <Plus size={16} /> Add Room
                     </button>
                 </div>

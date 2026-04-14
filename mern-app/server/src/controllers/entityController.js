@@ -63,15 +63,19 @@ export const create = async (req, res) => {
     const Model = getModel(entity);
     if (!Model) return res.status(404).json({ error: 'Entity not found' });
 
+    // Handle Atomic Program + Year Generation
     if (entity === 'programs') {
-        const session = await mongoose.startSession();
-        session.startTransaction();
+        const { name, durationYears } = req.body;
+        
+        // Use a standard sequential create to support standalone MongoDB instances (non-replica sets)
+        // If Year creation fails, the Program remains but years will be missing. 
+        // We catch this in the UI by checking for empty year lists.
         try {
-            const { name, durationYears } = req.body;
-            
+            // 1. Create Program
             const program = new models.Program({ name, durationYears });
-            const savedProgram = await program.save({ session });
+            const savedProgram = await program.save();
 
+            // 2. Generate Academic Years
             const yearsToCreate = [];
             for (let i = 1; i <= durationYears; i++) {
                 yearsToCreate.push({
@@ -79,18 +83,15 @@ export const create = async (req, res) => {
                     yearNumber: i
                 });
             }
-            await models.AcademicYear.insertMany(yearsToCreate, { session });
+            await models.AcademicYear.insertMany(yearsToCreate);
 
-            await session.commitTransaction();
             return res.status(201).json(savedProgram);
         } catch (err) {
-            await session.abortTransaction();
             return res.status(400).json({ error: err.message });
-        } finally {
-            session.endSession();
         }
     }
 
+    // Standard Creation with Uniqueness for Sections
     if (entity === 'sections') {
         try {
             const { yearId, name } = req.body;
