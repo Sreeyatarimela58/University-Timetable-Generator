@@ -1,0 +1,79 @@
+.timetable-grid {
+  display: grid;
+  grid-template-columns: 80px repeat(5, 1fr);
+  gap: 8px;
+  margin-top: 1.5rem;
+  overflow-x: auto;
+}
+
+.grid-header {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  padding: 12px;
+  text-align: center;
+  font-weight: 600;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.grid-time-label {
+  background: rgba(15, 23, 42, 0.4);
+  color: var(--text-muted);
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.grid-cell {
+  background: rgba(30, 41, 59, 0.4);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  min-height: 80px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  transition: transform 0.2s;
+}
+
+.grid-cell:hover {
+  transform: translateY(-2px);
+  background: rgba(30, 41, 59, 0.8);
+  border-color: var(--brand-primary);
+}
+
+.grid-cell.lunch-break {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: var(--warning);
+  align-items: center;
+  font-weight: 600;
+  letter-spacing: 2px;
+}
+
+.course-badge {
+  background: var(--brand-primary);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+  align-self: flex-start;
+}
+
+.cell-info {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.cell-info strong {
+  color: var(--text-primary);
+}
