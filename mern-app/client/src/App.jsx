@@ -1,80 +1,100 @@
-import React from 'react'
-import { Routes, Route, Link, Navigate } from 'react-router-dom'
-import { CalendarDays, Home, LayoutGrid, LogOut } from 'lucide-react'
-import { Dashboard } from './pages/Dashboard'
-import { TimetableGrid } from './components/TimetableGrid'
-import { Portal } from './pages/Portal'
-import { Login } from './pages/Login'
-import { AuthProvider, useAuth } from './context/AuthContext'
+import React from 'react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Dashboard } from './pages/Dashboard';
+import { TimetableGrid } from './components/TimetableGrid';
+import { Portal } from './pages/Portal';
+import { Login } from './pages/Login';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import Sidebar from './components/Sidebar';
+import TopHeader from './components/TopHeader';
 
-const Layout = ({ children }) => {
-  const { user, logout } = useAuth();
+// Dashboard Tabs
+import { OverviewTab }       from './components/dashboard/OverviewTab';
+import { InfrastructureTab } from './components/dashboard/InfrastructureTab';
+import { CoursesTab }        from './components/dashboard/CoursesTab';
+import { UsersTab }           from './components/dashboard/UsersTab';
+import { AssignmentsTab }    from './components/dashboard/AssignmentsTab';
+import { SolverTab }         from './components/dashboard/SolverTab';
+import { ArchivesTab }       from './components/dashboard/ArchivesTab';
 
-  return (
-    <div className="app-container">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-        <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '1.8rem' }}>
-          <CalendarDays size={32} color="var(--brand-primary)" />
-          Timetable Engine
-        </h1>
-        
-        {user && (
-            <nav style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-              {user.role === 'admin' && (
-                  <Link to="/admin" className="btn glass-panel" style={{ padding: '0.5rem 1rem' }}>
-                    <Home size={18} /> Admin Console
-                  </Link>
-              )}
-              
-              <Link to="/timetable" className="btn btn-primary" style={{ padding: '0.5rem 1rem' }}>
-                <LayoutGrid size={18} /> {user.role === 'admin' ? 'Published Grid' : 'My Schedule'}
-              </Link>
+// ─── Authenticated Admin Layout ──────────────────────────────
+const AdminLayout = ({ children }) => {
+    const location = useLocation();
 
-              <button onClick={logout} className="btn" style={{ padding: '0.5rem 1rem', background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
-                <LogOut size={18} /> Logout
-              </button>
-            </nav>
-        )}
-      </header>
-      <main>
-        {children}
-      </main>
-    </div>
-  )
-}
+    // Mapping titles to paths for the TopHeader
+    const titles = {
+        '/admin/overview':       'Administrative Intelligence',
+        '/admin/infrastructure': 'Infrastructure Management',
+        '/admin/courses':        'Curriculum Architecture',
+        '/admin/users':          'Faculty & Student Directory',
+        '/admin/assignments':    'Academic Load Assignment',
+        '/admin/solver':         'Intelligence Engine',
+        '/admin/archives':       'Academic Records',
+        '/timetable':            'Timetable Master View',
+    };
 
+    const title = titles[location.pathname] || 'Uni TT Gen';
+
+    return (
+        <div className="app-layout">
+            <Sidebar />
+            <div className="app-main">
+                <TopHeader title={title} />
+                <div className="animate-in">
+                    {children}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ─── Route Guard & Router ────────────────────────────────────
 const BaseRoutes = () => {
     const { user } = useAuth();
-    
-    if(!user) {
+
+    if (!user) {
         return (
             <Routes>
-                <Route path="/" element={<Portal />} />
-                <Route path="/login/:role" element={<Login />} />
-                <Route path="*" element={<Navigate to="/" />} />
+                <Route path="/"             element={<Portal />} />
+                <Route path="/login/:role"  element={<Login />} />
+                <Route path="*"             element={<Navigate to="/" />} />
             </Routes>
         );
     }
-    
+
     return (
-      <Routes>
-        {user.role === 'admin' && <Route path="/admin" element={<Dashboard />} />}
-        <Route path="/timetable" element={<TimetableGrid />} />
-        
-        <Route path="/" element={<Navigate to={user.role === 'admin' ? "/admin" : "/timetable"} />} />
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
+        <AdminLayout>
+            <Routes>
+                {user.role === 'admin' && (
+                    <Route path="/admin" element={<Dashboard />}>
+                        {/* Redirection from /admin to /admin/overview */}
+                        <Route index element={<Navigate to="/admin/overview" replace />} />
+                        <Route path="overview"       element={<OverviewTab />} />
+                        <Route path="infrastructure" element={<InfrastructureTab />} />
+                        <Route path="courses"        element={<CoursesTab />} />
+                        <Route path="users"          element={<UsersTab />} />
+                        <Route path="assignments"    element={<AssignmentsTab />} />
+                        <Route path="solver"         element={<SolverTab />} />
+                        <Route path="archives"       element={<ArchivesTab />} />
+                    </Route>
+                )}
+                <Route path="/timetable" element={<TimetableGrid />} />
+                
+                {/* Fallback routing */}
+                <Route path="/"    element={<Navigate to={user.role === 'admin' ? '/admin/overview' : '/timetable'} replace />} />
+                <Route path="*"    element={<Navigate to="/" replace />} />
+            </Routes>
+        </AdminLayout>
+    );
+};
+
+// ─── Root App ────────────────────────────────────────────────
+function App() {
+    return (
+        <AuthProvider>
+            <BaseRoutes />
+        </AuthProvider>
     );
 }
 
-function App() {
-  return (
-    <AuthProvider>
-        <Layout>
-            <BaseRoutes />
-        </Layout>
-    </AuthProvider>
-  )
-}
-
-export default App
+export default App;

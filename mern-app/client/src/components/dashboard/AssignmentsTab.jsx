@@ -1,63 +1,81 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api/client';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Link, Users, BookOpen } from 'lucide-react';
 
 export const AssignmentsTab = () => {
-    const [teachers, setTeachers] = useState([]);
-    const [sections, setSections] = useState([]);
-    const [courses, setCourses] = useState([]);
+    const [teachers,    setTeachers]    = useState([]);
+    const [sections,    setSections]    = useState([]);
+    const [courses,     setCourses]     = useState([]);
     const [assignments, setAssignments] = useState([]);
-    const [msg, setMsg] = useState('');
-    const [aForm, setAForm] = useState({ 
-        sectionId: '', 
-        courseId: '', 
-        theoryTeacherIds: [], 
-        labTeacherIds: [] 
+    const [msg,         setMsg]         = useState({ text: '', isError: false });
+
+    const [aForm, setAForm] = useState({
+        sectionId: '',
+        courseId: '',
+        theoryTeacherIds: [],
+        labTeacherIds: [],
     });
 
     const load = async () => {
         try {
             const [t, s, c, a] = await Promise.all([
-                api.get('/teachers'), api.get('/sections'), api.get('/courses'), api.get('/courseassignments')
+                api.get('/teachers'), api.get('/sections'),
+                api.get('/courses'), api.get('/courseassignments'),
             ]);
-            setTeachers(t.data); setSections(s.data); setCourses(c.data); setAssignments(a.data);
+            setTeachers(t.data); setSections(s.data);
+            setCourses(c.data);  setAssignments(a.data);
         } catch (e) { console.error(e); }
     };
 
     useEffect(() => { load(); }, []);
 
+    const showMsg = (text, isError = false) => {
+        setMsg({ text, isError });
+        setTimeout(() => setMsg({ text: '', isError: false }), 4000);
+    };
+
     const selectedCourse = courses.find(c => c._id === aForm.courseId);
 
     const addAssignment = async () => {
-        setMsg('');
         try {
             await api.post('/courseassignments', aForm);
-            setMsg('Assignment created.');
+            showMsg('Assignment created successfully.');
             setAForm({ sectionId: '', courseId: '', theoryTeacherIds: [], labTeacherIds: [] });
             load();
         } catch (err) {
-            setMsg(err.response?.data?.error || 'Failed to create assignment');
+            showMsg(err.response?.data?.error || 'Failed to create assignment', true);
         }
     };
 
-    const deleteEntity = async (entity, id) => {
+    const deleteAssignment = async (id) => {
         try {
-            await api.delete(`/${entity}/${id}`);
+            await api.delete(`/courseassignments/${id}`);
             load();
         } catch (err) {
-            setMsg(err.response?.data?.error || 'Delete failed');
+            showMsg(err.response?.data?.error || 'Delete failed', true);
         }
     };
 
     return (
-        <div className="tab-content">
-            {msg && <div className="glass-panel form-msg" style={{ marginBottom: '1rem' }}>{msg}</div>}
+        <div className="animate-in" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '32px', alignItems: 'start' }}>
 
-            <div className="glass-panel entity-section">
-                <h3>Course Assignments</h3>
-                <p className="hint-text">Link a Section → Course → Specific Teachers for Theory/Lab</p>
-                
-                <div className="form-grid">
+            {/* Form Panel */}
+            <div className="section-panel">
+                <div className="section-header">
+                    <Link size={20} color="var(--primary)" />
+                    <h3 className="section-title">New Assignment</h3>
+                </div>
+                <p style={{ fontSize: '13px', color: 'var(--secondary)', marginBottom: '24px', lineHeight: 1.6 }}>
+                    Link a Section → Course → Teachers for Theory & Lab sessions.
+                </p>
+
+                {msg.text && (
+                    <div className={`alert ${msg.isError ? 'alert-error' : 'alert-success'}`} style={{ marginBottom: '20px' }}>
+                        {msg.text}
+                    </div>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                     <div className="input-group">
                         <label className="input-label">Target Section</label>
                         <select className="input-field" value={aForm.sectionId}
@@ -68,7 +86,7 @@ export const AssignmentsTab = () => {
                     </div>
 
                     <div className="input-group">
-                        <label className="input-label">Assigned Course</label>
+                        <label className="input-label">Course</label>
                         <select className="input-field" value={aForm.courseId}
                             onChange={e => setAForm({ ...aForm, courseId: e.target.value, theoryTeacherIds: [], labTeacherIds: [] })}>
                             <option value="">— Select Course —</option>
@@ -79,59 +97,103 @@ export const AssignmentsTab = () => {
                     {selectedCourse?.theoryTotal > 0 && (
                         <div className="input-group">
                             <label className="input-label">Theory Teacher(s)</label>
-                            <select className="input-field" multiple value={aForm.theoryTeacherIds}
+                            <select className="input-field" multiple
+                                value={aForm.theoryTeacherIds}
                                 onChange={e => setAForm({ ...aForm, theoryTeacherIds: Array.from(e.target.selectedOptions, o => o.value) })}
-                                style={{ minHeight: '100px' }}>
+                                style={{ minHeight: '100px', borderRadius: '12px', padding: '8px' }}>
                                 {teachers.map(t => <option key={t._id} value={t._id}>{t.name}</option>)}
                             </select>
-                            <span className="hint-text" style={{ fontSize: '0.7rem' }}>Hold Ctrl/Cmd to select multiple</span>
+                            <span style={{ fontSize: '11px', color: 'var(--secondary)' }}>Hold Ctrl / ⌘ to select multiple</span>
                         </div>
                     )}
 
                     {selectedCourse?.labTotal > 0 && (
                         <div className="input-group">
                             <label className="input-label">Lab Teacher(s)</label>
-                            <select className="input-field" multiple value={aForm.labTeacherIds}
+                            <select className="input-field" multiple
+                                value={aForm.labTeacherIds}
                                 onChange={e => setAForm({ ...aForm, labTeacherIds: Array.from(e.target.selectedOptions, o => o.value) })}
-                                style={{ minHeight: '100px' }}>
+                                style={{ minHeight: '100px', borderRadius: '12px', padding: '8px' }}>
                                 {teachers.map(t => <option key={t._id} value={t._id}>{t.name}</option>)}
                             </select>
-                            <span className="hint-text" style={{ fontSize: '0.7rem' }}>Hold Ctrl/Cmd to select multiple</span>
+                            <span style={{ fontSize: '11px', color: 'var(--secondary)' }}>Hold Ctrl / ⌘ to select multiple</span>
                         </div>
                     )}
 
-                    <button className="btn btn-primary" style={{ gridColumn: '1 / -1', marginTop: '1rem' }} onClick={addAssignment}
-                        disabled={!aForm.sectionId || !aForm.courseId}>
+                    <button
+                        className="btn btn-primary"
+                        style={{ width: '100%', padding: '13px', borderRadius: '14px' }}
+                        onClick={addAssignment}
+                        disabled={!aForm.sectionId || !aForm.courseId}
+                    >
                         <Plus size={16} /> Assign Course to Section
                     </button>
                 </div>
-
-                <div className="entity-chips" style={{ marginTop: '1.5rem' }}>
-                    {assignments.map(a => (
-                        <span key={a._id} className="chip" style={{ display: 'block', padding: '1rem', marginBottom: '0.5rem' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <strong>{a.courseId?.name} → {a.sectionId?.name}</strong>
-                                <Trash2 size={16} className="chip-delete" onClick={() => deleteEntity('courseassignments', a._id)} />
-                            </div>
-                            <div className="hint-text" style={{ fontSize: '0.86rem', marginTop: '0.5rem', color: 'var(--text-primary)' }}>
-                                {a.theoryTeacherIds?.length > 0 && <span><strong>Th:</strong> {a.theoryTeacherIds.map(t => t.name).join(', ')}</span>}
-                                {a.labTeacherIds?.length > 0 && <span style={{ marginLeft: '1rem' }}><strong>Lb:</strong> {a.labTeacherIds.map(t => t.name).join(', ')}</span>}
-                            </div>
-                        </span>
-                    ))}
-                </div>
             </div>
 
-            {/* Read-Only Teachers for reference */}
-            <div className="glass-panel entity-section" style={{ marginTop: '2rem' }}>
-                <h3>Faculty Workload Info</h3>
-                <div className="entity-chips">
-                    {teachers.map(t => (
-                        <span key={t._id} className="chip">
-                            {t.name} ({t.maxHoursPerWeek}h max)
-                        </span>
-                    ))}
+            {/* Assignments List + Faculty Info */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+
+                {/* Assignment Cards */}
+                <div>
+                    <div className="section-header">
+                        <h3 className="section-title" style={{ fontSize: '17px' }}>
+                            Active Assignments
+                            <span style={{ marginLeft: '8px', fontSize: '12px', fontWeight: 600, color: 'var(--secondary)' }}>({assignments.length})</span>
+                        </h3>
+                    </div>
+
+                    {assignments.length === 0 ? (
+                        <div className="apple-card" style={{ padding: '48px', textAlign: 'center' }}>
+                            <BookOpen size={32} color="var(--secondary)" style={{ margin: '0 auto 12px' }} />
+                            <p style={{ color: 'var(--secondary)', fontSize: '14px' }}>No assignments yet. Create the first one.</p>
+                        </div>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            {assignments.map(a => (
+                                <div key={a._id} className="item-card">
+                                    <div>
+                                        <p style={{ fontWeight: 700, fontSize: '14px' }}>
+                                            {a.courseId?.name || '—'}
+                                        </p>
+                                        <p style={{ fontSize: '12px', color: 'var(--secondary)', marginTop: '3px' }}>
+                                            Section: <strong>{a.sectionId?.name || '—'}</strong>
+                                            {a.courseId?.code && <span style={{ marginLeft: '8px' }}>· <span className="mono" style={{ fontSize: '11px' }}>{a.courseId.code}</span></span>}
+                                        </p>
+                                        <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
+                                            {a.theoryTeacherIds?.length > 0 && (
+                                                <span className="chip chip-primary">Theory: {a.theoryTeacherIds.map(t => t.name).join(', ')}</span>
+                                            )}
+                                            {a.labTeacherIds?.length > 0 && (
+                                                <span className="chip">Lab: {a.labTeacherIds.map(t => t.name).join(', ')}</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <button className="btn btn-danger btn-icon" onClick={() => deleteAssignment(a._id)} title="Delete assignment">
+                                        <Trash2 size={15} />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
+
+                {/* Faculty Workload Summary */}
+                {teachers.length > 0 && (
+                    <div className="apple-card" style={{ padding: '24px' }}>
+                        <div className="section-header" style={{ marginBottom: '16px' }}>
+                            <Users size={18} color="var(--secondary)" />
+                            <h4 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--on-surface)' }}>Faculty Workload</h4>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            {teachers.map(t => (
+                                <span key={t._id} className="chip" style={{ padding: '6px 12px', fontSize: '11px' }}>
+                                    {t.name} · {t.maxHoursPerWeek}h/wk
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

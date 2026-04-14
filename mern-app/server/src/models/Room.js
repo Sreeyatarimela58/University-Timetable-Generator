@@ -13,7 +13,9 @@ const roomSchema = new mongoose.Schema({
     },
     capacity: {
         type: Number,
-        required: true
+        required: true,
+        min: 15,
+        max: 120
     }
 }, { timestamps: true });
 
