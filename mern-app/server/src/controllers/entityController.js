@@ -22,8 +22,6 @@ export const getAll = async (req, res) => {
         const Model = getModel(entity);
         if (!Model) return res.status(404).json({ error: 'Entity not found' });
         
-        // Final Model Filtering: Only pull active for non-immutable entities if they use isActive
-        // But per latest pivot, we only filter if the flag exists.
         let query = Model.find();
 
         if (entity === 'academicyears') {
@@ -65,18 +63,15 @@ export const create = async (req, res) => {
     const Model = getModel(entity);
     if (!Model) return res.status(404).json({ error: 'Entity not found' });
 
-    // Handle Atomic Program + Year Generation
     if (entity === 'programs') {
         const session = await mongoose.startSession();
         session.startTransaction();
         try {
             const { name, durationYears } = req.body;
             
-            // 1. Create Program
             const program = new models.Program({ name, durationYears });
             const savedProgram = await program.save({ session });
 
-            // 2. Generate Academic Years
             const yearsToCreate = [];
             for (let i = 1; i <= durationYears; i++) {
                 yearsToCreate.push({
@@ -96,7 +91,6 @@ export const create = async (req, res) => {
         }
     }
 
-    // Standard Creation with Uniqueness for Sections
     if (entity === 'sections') {
         try {
             const { yearId, name } = req.body;
@@ -120,19 +114,39 @@ export const update = async (req, res) => {
         const Model = getModel(entity);
         if (!Model) return res.status(404).json({ error: 'Entity not found' });
 
-        // IMMUTABILITY GUARD
         if (entity === 'programs' || entity === 'academicyears') {
             return res.status(403).json({ error: 'Academic structure is immutable after creation.' });
         }
 
         if (entity === 'sections') {
-            // Only allow editing "strength"
             const allowed = ['strength'];
             const attempted = Object.keys(req.body);
             const isIllegal = attempted.some(key => !allowed.includes(key));
             
             if (isIllegal) {
                 return res.status(403).json({ error: 'Only section strength can be modified. Name and Year are immutable.' });
+            }
+
+            // TRIGGER Hardening: Only archive if strength ACTUALLY changes
+            const currentSection = await models.Section.findById(req.params.id);
+            const newStrength = req.body.strength !== undefined ? Number(req.body.strength) : undefined;
+            
+            // VALIDATION: Reject if strength is provided but invalid
+            if (req.body.strength !== undefined && !Number.isFinite(newStrength)) {
+                return res.status(400).json({ error: "Invalid strength value. Must be a number." });
+            }
+
+            if (currentSection && newStrength !== undefined && newStrength !== currentSection.strength) {
+                // ARCHIVE: Only target active rows
+                await models.Timetable.updateMany(
+                    { sectionId: req.params.id, isArchived: false },
+                    { 
+                        $set: { 
+                            isArchived: true,
+                            archivedAt: new Date()
+                        } 
+                    }
+                );
             }
         }
         
@@ -151,7 +165,6 @@ export const remove = async (req, res) => {
         const Model = getModel(entity);
         if (!Model) return res.status(404).json({ error: 'Entity not found' });
 
-        // IMMUTABILITY GUARD
         if (entity === 'programs' || entity === 'academicyears' || entity === 'sections') {
             return res.status(403).json({ error: 'Academic structure (Programs, Years, Sections) is immutable.' });
         }

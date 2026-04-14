@@ -44,6 +44,9 @@ const timetableSchema = new mongoose.Schema({
     isArchived: {
         type: Boolean,
         default: false
+    },
+    archivedAt: {
+        type: Date
     }
 }, { timestamps: true });
 
