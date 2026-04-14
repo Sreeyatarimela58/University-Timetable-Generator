@@ -32,6 +32,11 @@ const timetableSchema = new mongoose.Schema({
         max: 8,
         required: true
     },
+    component: {
+        type: String,
+        enum: ['theory', 'lab'],
+        required: true
+    },
     isLocked: {
         type: Boolean,
         default: false

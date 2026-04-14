@@ -51,35 +51,56 @@ export const UsersTab = () => {
                     This will create both the physical profile and the login account (ID No = Username).
                 </p>
                 <form onSubmit={handleCreate} className="form-grid">
-                    <input className="input-field" placeholder="Full Name" value={form.name}
-                        onChange={e => setForm({ ...form, name: e.target.value })} required />
-                    <input className="input-field" placeholder="ID Number (becomes login username)" value={form.username}
-                        onChange={e => setForm({ ...form, username: e.target.value })} required />
-                    <input className="input-field" placeholder="Login Password" type="password" value={form.password}
-                        onChange={e => setForm({ ...form, password: e.target.value })} required />
-                    <select className="input-field" value={form.role}
-                        onChange={e => setForm({ ...form, role: e.target.value, sectionId: '' })}>
-                        <option value="student">Student</option>
-                        <option value="prof">Professor</option>
-                    </select>
+                    <div className="input-group">
+                        <label className="input-label">Full Name</label>
+                        <input className="input-field" placeholder="Full Name" value={form.name}
+                            onChange={e => setForm({ ...form, name: e.target.value })} required />
+                    </div>
+                    
+                    <div className="input-group">
+                        <label className="input-label">ID Number (Login Username)</label>
+                        <input className="input-field" placeholder="ID Number" value={form.username}
+                            onChange={e => setForm({ ...form, username: e.target.value })} required />
+                    </div>
+
+                    <div className="input-group">
+                        <label className="input-label">Login Password</label>
+                        <input className="input-field" placeholder="Login Password" type="password" value={form.password}
+                            onChange={e => setForm({ ...form, password: e.target.value })} required />
+                    </div>
+
+                    <div className="input-group">
+                        <label className="input-label">Role</label>
+                        <select className="input-field" value={form.role}
+                            onChange={e => setForm({ ...form, role: e.target.value, sectionId: '' })}>
+                            <option value="student">Student</option>
+                            <option value="prof">Professor</option>
+                        </select>
+                    </div>
 
                     {form.role === 'student' && (
-                        <select className="input-field" value={form.sectionId}
-                            onChange={e => setForm({ ...form, sectionId: e.target.value })}>
-                            <option value="">— Assign to Section (optional) —</option>
-                            {sections.map(s => (
-                                <option key={s._id} value={s._id}>{s.name}</option>
-                            ))}
-                        </select>
+                        <div className="input-group">
+                            <label className="input-label">Section Assignment</label>
+                            <select className="input-field" value={form.sectionId}
+                                onChange={e => setForm({ ...form, sectionId: e.target.value })}>
+                                <option value="">— Assign to Section (optional) —</option>
+                                {sections.map(s => (
+                                    <option key={s._id} value={s._id}>{s.name}</option>
+                                ))}
+                            </select>
+                        </div>
                     )}
 
                     {form.role === 'prof' && (
-                        <input className="input-field" type="number" placeholder="Max Hrs/Week (default 20)" 
-                            value={form.maxHoursPerWeek}
-                            onChange={e => setForm({ ...form, maxHoursPerWeek: Number(e.target.value) })} required />
+                        <div className="input-group">
+                            <label className="input-label">Max Teaching Hours / Week</label>
+                            <input className="input-field" type="number" placeholder="20" 
+                                value={form.maxHoursPerWeek}
+                                onChange={e => setForm({ ...form, maxHoursPerWeek: Number(e.target.value) })} required />
+                        </div>
                     )}
 
-                    <button type="submit" className="btn btn-primary" style={{ gridColumn: '1 / -1' }}>
+                    <button type="submit" className="btn btn-primary" style={{ gridColumn: '1 / -1', marginTop: '1rem' }}>
                         Create Profile & Account
                     </button>
                     {msg && <div className="form-msg" style={{ gridColumn: '1 / -1' }}>{msg}</div>}

@@ -152,6 +152,19 @@ select.input-field option {
   color: var(--text-primary);
 }
 
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.input-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-left: 2px;
+}
+
 /* Container */
 .app-container {
   max-width: 1400px;

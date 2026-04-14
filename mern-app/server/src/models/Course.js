@@ -15,19 +15,27 @@ const courseSchema = new mongoose.Schema({
         required: true,
         trim: true
     },
-    type: {
+    code: {
         type: String,
-        enum: ['theory', 'lab'],
-        required: true
-    },
-    hoursPerWeek: {
-        type: Number,
-        required: true
-    },
-    consecutiveSlotsRequired: {
-        type: Number,
         required: true,
+        trim: true,
+        unique: true
+    },
+    theoryHours: {
+        type: Number,
+        default: 0
+    },
+    labHours: {
+        type: Number,
+        default: 0
+    },
+    theoryConsecutive: {
+        type: Number,
         default: 1
+    },
+    labConsecutive: {
+        type: Number,
+        default: 2
     }
 }, { timestamps: true });
 

@@ -1,163 +1,141 @@
 import * as models from '../models/index.js';
 import { executePrologSolver } from '../services/prologService.js';
 
-// In-memory generation lock to prevent concurrent runs
 let isGenerating = false;
 
-/**
- * POST /api/generate-drafts
- * Gathers DB state → builds Prolog facts → calls solver → persists 3 drafts → returns draftId
- */
 export const generateDrafts = async (req, res) => {
     if (isGenerating) {
-        return res.status(423).json({ error: 'Generation already in progress. Please wait.' });
+        return res.status(423).json({ error: 'Generation already in progress.' });
     }
 
     isGenerating = true;
 
     try {
-        console.log('Starting draft generation process...');
+        console.log('Starting draft generation with Unified Courses...');
 
-        // 1. Fetch entire database state
         const teachers    = await models.Teacher.find();
         const rooms       = await models.Room.find();
         const sections    = await models.Section.find();
         const courses     = await models.Course.find();
         const assignments = await models.CourseAssignment.find();
 
-        // Validate minimum data
         if (!teachers.length || !rooms.length || !sections.length || !courses.length) {
-            return res.status(400).json({
-                error: 'Insufficient data. Need at least 1 Teacher, 1 Room, 1 Section, and 1 Course.'
-            });
+            return res.status(400).json({ error: 'Insufficient data for generation.' });
         }
 
-        // 2. Transpile to Prolog facts (exact contract format)
+        // 1. Transpile to Prolog
         let facts = '';
-
-        facts += '% Base Entities\n';
         teachers.forEach(t => facts += `teacher(id_${t._id}, ${t.maxHoursPerWeek}).\n`);
         rooms.forEach(r => facts += `room(id_${r._id}, ${r.type}, ${r.capacity}).\n`);
         sections.forEach(s => facts += `section(id_${s._id}, ${s.strength}).\n`);
-        courses.forEach(c => facts += `course(id_${c._id}, ${c.type}, ${c.hoursPerWeek}, ${c.consecutiveSlotsRequired}).\n`);
-
-        facts += '\n% Relational Mappings\n';
-        assignments.forEach(a => {
-            facts += `section_course(id_${a.sectionId}, id_${a.courseId}).\n`;
-            const teacherList = a.teacherIds.map(tid => `id_${tid}`).join(', ');
-            facts += `allowed_teachers(id_${a.courseId}, id_${a.sectionId}, [${teacherList}]).\n`;
+        
+        courses.forEach(c => {
+            if (c.theoryHours > 0) 
+                facts += `course(id_${c._id}_T, theory, ${c.theoryHours}, ${c.theoryConsecutive || 1}).\n`;
+            if (c.labHours > 0) 
+                facts += `course(id_${c._id}_L, lab, ${c.labHours}, ${c.labConsecutive || 2}).\n`;
         });
 
-        facts += '\n% Boundary Constraints\n';
-        teachers.forEach(t => {
-            if (t.unavailableSlots) {
-                t.unavailableSlots.forEach(slotObj => {
-                    facts += `unavailable(id_${t._id}, ${slotObj.day}, ${slotObj.slot}).\n`;
-                });
+        assignments.forEach(a => {
+            const c = courses.find(course => course._id.toString() === a.courseId.toString());
+            if (!c) return;
+            if (c.theoryHours > 0 && a.theoryTeacherIds?.length) {
+                facts += `section_course(id_${a.sectionId}, id_${c._id}_T).\n`;
+                facts += `allowed_teachers(id_${c._id}_T, id_${a.sectionId}, [${a.theoryTeacherIds.map(id => `id_${id}`).join(', ')}]).\n`;
+            }
+            if (c.labHours > 0 && a.labTeacherIds?.length) {
+                facts += `section_course(id_${a.sectionId}, id_${c._id}_L).\n`;
+                facts += `allowed_teachers(id_${c._id}_L, id_${a.sectionId}, [${a.labTeacherIds.map(id => `id_${id}`).join(', ')}]).\n`;
             }
         });
 
-        facts += '\n% The Grid\n';
-        facts += 'day(mon). day(tue). day(wed). day(thu). day(fri).\n';
-        facts += 'slot(1). slot(2). slot(3). slot(4). slot(5). slot(6). slot(7). slot(8).\n';
+        teachers.forEach(t => t.unavailableSlots?.forEach(s => facts += `unavailable(id_${t._id}, ${s.day}, ${s.slot}).\n`));
+        facts += 'day(mon). day(tue). day(wed). day(thu). day(fri).\nslot(1). slot(2). slot(3). slot(4). slot(5). slot(6). slot(7). slot(8).\n';
 
-        // 3. Execute solver (mock or real)
-        console.log('Executing prolog constraints solver...');
+        // 2. Execute solver
         const engineResponse = await executePrologSolver(facts);
 
-        if (!engineResponse || !engineResponse.drafts || !engineResponse.drafts.length) {
-            return res.status(500).json({ error: 'Solver returned no valid drafts.' });
+        if (!engineResponse || !engineResponse.drafts) {
+            throw new Error('Solver failed to return status.');
         }
 
-        // 4. Strip id_ prefixes for clean Mongo storage
+        // 3. Map back to Human-Readable and DB objects
         const cleanDrafts = engineResponse.drafts.map(draft => ({
             score: draft.score,
-            timetable: draft.timetable.map(entry => ({
-                sectionId: entry.sectionId.replace('id_', ''),
-                courseId:   entry.courseId.replace('id_', ''),
-                teacherId:  entry.teacherId.replace('id_', ''),
-                roomId:     entry.roomId.replace('id_', ''),
-                day:        entry.day,
-                slot:       entry.slot
-            }))
+            timetable: draft.timetable.map(entry => {
+                const isTheory = entry.courseId.endsWith('_T');
+                const isLab = entry.courseId.endsWith('_L');
+                const cid = entry.courseId.replace('id_', '').replace('_T', '').replace('_L', '');
+                const sid = entry.sectionId.replace('id_', '');
+                const tid = entry.teacherId.replace('id_', '');
+                const rid = entry.roomId.replace('id_', '');
+
+                const course = courses.find(c => c._id.toString() === cid);
+                const teacher = teachers.find(t => t._id.toString() === tid);
+                const section = sections.find(s => s._id.toString() === sid);
+                const room = rooms.find(r => r._id.toString() === rid);
+
+                return {
+                    sectionId: sid,
+                    sectionName: section?.name || sid,
+                    courseId: cid,
+                    courseName: course?.name || cid,
+                    teacherId: tid,
+                    teacherName: teacher?.name || tid,
+                    roomId: rid,
+                    roomName: room?.name || rid,
+                    day: entry.day,
+                    slot: entry.slot,
+                    component: isLab ? 'lab' : 'theory'
+                };
+            })
         }));
 
-        // 5. Persist to DraftTimetable collection
         const draftDoc = await models.DraftTimetable.create({
             drafts: cleanDrafts,
             createdBy: req.user._id
         });
 
-        console.log(`Drafts persisted with ID: ${draftDoc._id}`);
         res.json({ draftId: draftDoc._id });
 
     } catch (err) {
-        console.error('Generator Error =>', err);
-        res.status(500).json({ error: err.message || 'Generation failed' });
+        console.error('Generator Error:', err);
+        res.status(500).json({ error: err.message });
     } finally {
         isGenerating = false;
     }
 };
 
-/**
- * GET /api/drafts/:id
- * Fetch a persisted draft set for preview
- */
 export const getDraft = async (req, res) => {
     try {
         const draft = await models.DraftTimetable.findById(req.params.id);
-        if (!draft) {
-            return res.status(404).json({ error: 'Draft not found or expired.' });
-        }
         res.json(draft);
     } catch (err) {
-        res.status(500).json({ error: 'Failed to retrieve draft.' });
+        res.status(500).json({ error: err.message });
     }
 };
 
-/**
- * POST /api/publish/:draftId/:optionIndex
- * Admin selects one of the 3 drafts → wipe live Timetable → insert chosen draft
- */
 export const publishDraft = async (req, res) => {
     try {
         const { draftId, optionIndex } = req.params;
-        const idx = parseInt(optionIndex, 10);
-
         const draftDoc = await models.DraftTimetable.findById(draftId);
-        if (!draftDoc) {
-            return res.status(404).json({ error: 'Draft not found or expired.' });
-        }
-
-        if (isNaN(idx) || idx < 0 || idx >= draftDoc.drafts.length) {
-            return res.status(400).json({ error: 'Invalid option index.' });
-        }
-
-        const chosenDraft = draftDoc.drafts[idx];
-
-        // Wipe existing live timetable
+        if (!draftDoc) return res.status(404).json({ error: 'Draft not found' });
+        
+        const chosen = draftDoc.drafts[parseInt(optionIndex, 10)];
         await models.Timetable.deleteMany({});
-
-        // Insert the chosen draft entries into the live collection
-        const entries = chosenDraft.timetable.map(t => ({
+        await models.Timetable.insertMany(chosen.timetable.map(t => ({
             sectionId: t.sectionId,
-            courseId:   t.courseId,
-            teacherId:  t.teacherId,
-            roomId:     t.roomId,
-            day:        t.day,
-            slot:       t.slot,
-            isLocked:   false
-        }));
+            courseId: t.courseId,
+            teacherId: t.teacherId,
+            roomId: t.roomId,
+            day: t.day,
+            slot: t.slot,
+            component: t.component
+        })));
 
-        await models.Timetable.insertMany(entries);
-
-        // Clean up the draft document after publishing
         await models.DraftTimetable.findByIdAndDelete(draftId);
-
-        res.json({ message: `Draft option ${idx + 1} (Score: ${chosenDraft.score}) published successfully.` });
-
+        res.json({ message: 'Published successfully' });
     } catch (err) {
-        console.error('Publish Error =>', err);
-        res.status(500).json({ error: 'Failed to publish draft.' });
+        res.status(500).json({ error: err.message });
     }
 };

@@ -2,11 +2,16 @@ import mongoose from 'mongoose';
 
 const timetableEntrySchema = new mongoose.Schema({
     sectionId: String,
+    sectionName: String,
     courseId: String,
+    courseName: String,
     teacherId: String,
+    teacherName: String,
     roomId: String,
+    roomName: String,
     day: String,
     slot: Number,
+    component: String
 }, { _id: false });
 
 const draftSchema = new mongoose.Schema({

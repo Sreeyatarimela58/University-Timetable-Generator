@@ -67,10 +67,16 @@
   letter-spacing: 2px;
 }
 
-/* Filled assignment */
-.grid-cell.filled-cell {
-  background: rgba(59, 130, 246, 0.08);
-  border-color: rgba(59, 130, 246, 0.25);
+/* Theory assignment */
+.grid-cell.theory-cell {
+  background: rgba(96, 165, 250, 0.08);
+  border-color: rgba(96, 165, 250, 0.3);
+}
+
+/* Lab assignment */
+.grid-cell.lab-cell {
+  background: rgba(248, 113, 113, 0.08);
+  border-color: rgba(248, 113, 113, 0.3);
 }
 
 .cell-course {
@@ -82,6 +88,13 @@
   font-weight: 600;
   margin-bottom: 4px;
   align-self: flex-start;
+}
+
+.cell-teacher {
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+  font-weight: 500;
 }
 
 .cell-meta {

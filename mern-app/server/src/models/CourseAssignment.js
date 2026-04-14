@@ -11,7 +11,11 @@ const courseAssignmentSchema = new mongoose.Schema({
         ref: 'Section',
         required: true
     },
-    teacherIds: [{
+    theoryTeacherIds: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Teacher'
+    }],
+    labTeacherIds: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Teacher'
     }]
