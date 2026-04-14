@@ -18,7 +18,11 @@ const courseAssignmentSchema = new mongoose.Schema({
     labTeacherIds: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Teacher'
-    }]
+    }],
+    isActive: {
+        type: Boolean,
+        default: true
+    }
 }, { timestamps: true });
 
 export const CourseAssignment = mongoose.model('CourseAssignment', courseAssignmentSchema);

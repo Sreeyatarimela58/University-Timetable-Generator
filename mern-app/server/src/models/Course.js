@@ -35,7 +35,11 @@ const courseSchema = new mongoose.Schema({
     },
     labSessions: [{
         type: Number
-    }]
+    }],
+    isActive: {
+        type: Boolean,
+        default: true
+    }
 }, { timestamps: true });
 
 // Validation helper could be added here, but we'll enforce it in the controller/frontend

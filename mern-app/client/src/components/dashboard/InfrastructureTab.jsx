@@ -1,65 +1,59 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api/client';
-import { Plus, Trash2, Info } from 'lucide-react';
+import { Plus, Info, Edit2, Check, X } from 'lucide-react';
 
 export const InfrastructureTab = () => {
+    // Entities
+    const [programs, setPrograms] = useState([]);
+    const [academicYears, setAcademicYears] = useState([]);
     const [sections, setSections] = useState([]);
     const [rooms, setRooms] = useState([]);
     const [courses, setCourses] = useState([]);
     const [msg, setMsg] = useState('');
 
-    const [sForm, setSForm] = useState({ name: '', strength: 60 });
+    // Form States
+    const [pForm, setPForm] = useState({ name: '', durationYears: 4 });
+    const [sForm, setSForm] = useState({ yearId: '', name: '', strength: 60 });
+    const [sFilters, setSFilters] = useState({ programId: '' }); 
     const [rForm, setRForm] = useState({ name: '', type: 'lecture', capacity: 60 });
-    
-    // Unified Course Form with Session Builder
-    const [cForm, setCForm] = useState({ 
-        name: '', 
-        code: '', 
-        theoryTotal: 3, 
-        theorySessions: [2, 1],
-        labTotal: 0, 
-        labSessions: [] 
-    });
-
+    const [cForm, setCForm] = useState({ name: '', code: '', theoryTotal: 3, theorySessions: [2, 1], labTotal: 0, labSessions: [] });
     const [slotErrors, setSlotErrors] = useState({ theory: '', lab: '' });
+
+    // Editing State (for Section Strength)
+    const [editSecId, setEditSecId] = useState(null);
+    const [editStrength, setEditStrength] = useState(0);
 
     const load = async () => {
         try {
-            const [s, r, c] = await Promise.all([
-                api.get('/sections'), api.get('/rooms'), api.get('/courses')
+            const [p, y, s, r, c] = await Promise.all([
+                api.get('/programs'), 
+                api.get('/academicyears'),
+                api.get('/sections'), 
+                api.get('/rooms'), 
+                api.get('/courses')
             ]);
-            setSections(s.data); setRooms(r.data); setCourses(c.data);
+            
+            const sortedYears = (y.data || []).sort((a,b) => a.yearNumber - b.yearNumber);
+            
+            setPrograms(p.data); 
+            setAcademicYears(sortedYears);
+            setSections(s.data); 
+            setRooms(r.data); 
+            setCourses(c.data);
         } catch (e) { console.error(e); }
     };
 
     useEffect(() => { load(); }, []);
 
+    useEffect(() => {
+        setSForm(prev => ({ ...prev, yearId: '' }));
+    }, [sFilters.programId]);
+
     const addEntity = async (entity, data, resetFn) => {
         setMsg('');
-        
-        // Validation for Course Session Sum
-        if (entity === 'courses') {
-            const thSum = data.theorySessions.reduce((a, b) => a + b, 0);
-            const lbSum = data.labSessions.reduce((a, b) => a + b, 0);
-            
-            if (data.theoryTotal > 0 && thSum !== data.theoryTotal) {
-                setMsg(`Error: Theory session sum (${thSum}) must equal total hours (${data.theoryTotal})`);
-                return;
-            }
-            if (data.labTotal > 0 && lbSum !== data.labTotal) {
-                setMsg(`Error: Lab session sum (${lbSum}) must equal total hours (${data.labTotal})`);
-                return;
-            }
-            // Max length validation (2h)
-            if ([...data.theorySessions, ...data.labSessions].some(s => s > 2)) {
-                setMsg('Error: Maximum slot duration is 2 hours.');
-                return;
-            }
-        }
-
         try {
             await api.post(`/${entity}`, data);
-            setMsg(`${entity} created.`);
+            setMsg(`${entity} created successfully.`);
             resetFn();
             load();
         } catch (err) {
@@ -67,47 +61,35 @@ export const InfrastructureTab = () => {
         }
     };
 
-    const deleteEntity = async (entity, id) => {
+    const updateSectionStrength = async (id) => {
         try {
-            await api.delete(`/${entity}/${id}`);
+            await api.put(`/sections/${id}`, { strength: editStrength });
+            setMsg('Strength updated.');
+            setEditSecId(null);
             load();
         } catch (err) {
-            setMsg(err.response?.data?.error || 'Delete failed');
+            setMsg(err.response?.data?.error || 'Update failed');
         }
     };
 
     const handleSessionCountChange = (type, count) => {
         const total = type === 'theory' ? cForm.theoryTotal : cForm.labTotal;
         const currentArr = type === 'theory' ? cForm.theorySessions : cForm.labSessions;
-        
-        // Calculate mathematical limits
         const minRequired = total > 0 ? Math.ceil(total / 2) : 0;
         const maxAllowed = total;
-
-        // Reset errors
         setSlotErrors(prev => ({ ...prev, [type]: '' }));
-
-        // Keyboard/Manual Entry Validation
-        if (count < minRequired && count !== 0) {
-            setSlotErrors(prev => ({ ...prev, [type]: `Min: ${minRequired} slots required` }));
-            // We still update to show what they typed, but validation keeps it from saving
-        } else if (count > maxAllowed) {
-            setSlotErrors(prev => ({ ...prev, [type]: `Max: ${maxAllowed} slots allowed` }));
-        }
+        if (count < minRequired && count !== 0) setSlotErrors(prev => ({ ...prev, [type]: `Min: ${minRequired} required` }));
+        else if (count > maxAllowed) setSlotErrors(prev => ({ ...prev, [type]: `Max: ${total} allowed` }));
 
         let newArr = [...currentArr];
-        // Only update the actual session array if the count is valid
         if (count >= minRequired && count <= maxAllowed) {
-            const safeCount = Math.min(count, 20); 
+            const safeCount = Math.min(count, 20);
             if (safeCount > currentArr.length) {
                 for (let i = currentArr.length; i < safeCount; i++) newArr.push(1);
             } else {
                 newArr = newArr.slice(0, safeCount);
             }
-        } else {
-            // Keep existing array or clear it if you want to hide boxes during error
-            newArr = []; 
-        }
+        } else { newArr = []; }
         
         if (type === 'theory') setCForm({ ...cForm, theorySessions: newArr, theoryTotal: total });
         else setCForm({ ...cForm, labSessions: newArr, labTotal: total });
@@ -122,40 +104,116 @@ export const InfrastructureTab = () => {
 
     return (
         <div className="tab-content">
-            {msg && <div className={`glass-panel form-msg ${msg.includes('Error') ? 'error-text' : ''}`} style={{ marginBottom: '1rem' }}>{msg}</div>}
+            {msg && <div className={`glass-panel form-msg ${msg.toLowerCase().includes('error') ? 'error-text' : ''}`} style={{ marginBottom: '1rem' }}>{msg}</div>}
 
-            {/* Sections */}
+            <div className="glass-panel" style={{ padding: '0.75rem', marginBottom: '1.5rem', opacity: 0.8, fontSize: '0.85rem' }}>
+                <Info size={14} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
+                <strong>Note:</strong> Academic Structure (Programs & Years) is immutable once created to ensure timetable stability.
+            </div>
+
+            {/* 1. Academic Structure (Atomic Setup) */}
             <div className="glass-panel entity-section" style={{ marginBottom: '1.5rem' }}>
-                <h3>Sections</h3>
+                <h3>Academic Setup</h3>
                 <div className="form-grid">
                     <div className="input-group">
-                        <label className="input-label">Section Name</label>
-                        <input className="input-field" placeholder="e.g. CSE-A" value={sForm.name}
-                            onChange={e => setSForm({ ...sForm, name: e.target.value })} />
+                        <label className="input-label">Program Name</label>
+                        <input className="input-field" placeholder="e.g. B.Tech Computer Science" value={pForm.name}
+                            onChange={e => setPForm({ ...pForm, name: e.target.value })} />
                     </div>
                     <div className="input-group">
-                        <label className="input-label">Student Strength</label>
-                        <input className="input-field" type="number" placeholder="60" value={sForm.strength}
-                            onChange={e => setSForm({ ...sForm, strength: Number(e.target.value) })} />
+                        <label className="input-label">Duration (Years)</label>
+                        <input className="input-field" type="number" min="1" max="8" value={pForm.durationYears}
+                            onChange={e => setPForm({ ...pForm, durationYears: Number(e.target.value) })} />
                     </div>
-                    <button className="btn btn-primary" style={{ alignSelf: 'flex-end', height: '42px' }} onClick={() =>
-                        addEntity('sections', sForm, () => setSForm({ name: '', strength: 60 }))}>
-                        <Plus size={16} /> Add Section
+                    <button className="btn btn-primary" style={{ alignSelf: 'flex-end', height: '42px' }} 
+                        onClick={() => addEntity('programs', pForm, () => setPForm({ name: '', durationYears: 4 }))}>
+                        <Plus size={16} /> Create Program & Years
                     </button>
                 </div>
-                <div className="entity-chips" style={{ marginTop: '1rem' }}>
-                    {sections.map(s => (
-                        <span key={s._id} className="chip">
-                            {s.name} ({s.strength})
-                            <Trash2 size={14} className="chip-delete" onClick={() => deleteEntity('sections', s._id)} />
-                        </span>
+
+                <div className="entity-chips" style={{ marginTop: '1.5rem' }}>
+                    {programs.map(p => (
+                        <div key={p._id} className="glass-panel" style={{ marginBottom: '0.5rem', background: 'rgba(255,255,255,0.03)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem' }}>
+                                <strong>{p.name}</strong>
+                                <span className="hint-text">{p.durationYears} Year Program</span>
+                            </div>
+                            <div style={{ padding: '0.75rem', paddingTop: 0, display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {academicYears.filter(y => y.programId?._id === p._id).map(y => (
+                                    <span key={y._id} className="chip" style={{ cursor: 'default' }}>Year {y.yearNumber}</span>
+                                ))}
+                            </div>
+                        </div>
                     ))}
                 </div>
             </div>
 
-            {/* Rooms */}
+            {/* 2. Sections */}
             <div className="glass-panel entity-section" style={{ marginBottom: '1.5rem' }}>
-                <h3>Rooms</h3>
+                <h3>Sections</h3>
+                <div className="form-grid">
+                    <div className="input-group">
+                        <label className="input-label">Select Program</label>
+                        <select className="input-field" value={sFilters.programId} onChange={e => setSFilters({ programId: e.target.value })}>
+                            <option value="">— Choose —</option>
+                            {programs.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
+                        </select>
+                    </div>
+                    <div className="input-group">
+                        <label className="input-label">Select Year</label>
+                        <select className="input-field" value={sForm.yearId} onChange={e => setSForm({ ...sForm, yearId: e.target.value })} disabled={!sFilters.programId}>
+                            <option value="">— Choose —</option>
+                            {academicYears.filter(y => y.programId?._id === sFilters.programId).map(y => (
+                                <option key={y._id} value={y._id}>Year {y.yearNumber}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="input-group">
+                        <label className="input-label">Section Name</label>
+                        <input className="input-field" placeholder="Section A" value={sForm.name}
+                            onChange={e => setSForm({ ...sForm, name: e.target.value })} />
+                    </div>
+                    <div className="input-group">
+                        <label className="input-label">Initial Strength</label>
+                        <input className="input-field" type="number" value={sForm.strength}
+                            onChange={e => setSForm({ ...sForm, strength: Number(e.target.value) })} />
+                    </div>
+                    <button className="btn btn-primary" style={{ gridColumn: '1 / -1' }} 
+                        onClick={() => addEntity('sections', sForm, () => setSForm({ ...sForm, name: '', strength: 60 }))}>
+                        <Plus size={16} /> Create Section
+                    </button>
+                </div>
+
+                <div className="entity-chips" style={{ marginTop: '1.5rem' }}>
+                    {sections.map(s => (
+                        <div key={s._id} className="chip" style={{ display: 'block', padding: '1rem', marginBottom: '0.5rem', cursor: 'default' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span><strong>{s.yearId?.programId?.name}</strong> → Year {s.yearId?.yearNumber} → <strong>{s.name}</strong></span>
+                                
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    {editSecId === s._id ? (
+                                        <>
+                                            <input className="input-field" type="number" style={{ width: '70px', height: '30px' }} 
+                                                value={editStrength} onChange={e => setEditStrength(Number(e.target.value))} autoFocus />
+                                            <Check size={16} className="text-secondary" style={{ cursor: 'pointer' }} onClick={() => updateSectionStrength(s._id)} />
+                                            <X size={16} className="error-text" style={{ cursor: 'pointer' }} onClick={() => setEditSecId(null)} />
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span style={{ color: 'var(--text-muted)' }}>{s.strength} students</span>
+                                            <Edit2 size={14} className="hint-text" style={{ cursor: 'pointer' }} onClick={() => { setEditSecId(s._id); setEditStrength(s.strength); }} />
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* 3. Rooms */}
+            <div className="glass-panel entity-section" style={{ marginBottom: '1.5rem' }}>
+                <h3>Physical Rooms</h3>
                 <div className="form-grid">
                     <div className="input-group">
                         <label className="input-label">Room Name</label>
@@ -164,8 +222,7 @@ export const InfrastructureTab = () => {
                     </div>
                     <div className="input-group">
                         <label className="input-label">Type</label>
-                        <select className="input-field" value={rForm.type}
-                            onChange={e => setRForm({ ...rForm, type: e.target.value })}>
+                        <select className="input-field" value={rForm.type} onChange={e => setRForm({ ...rForm, type: e.target.value })}>
                             <option value="lecture">Lecture Hall</option>
                             <option value="lab">Laboratory</option>
                         </select>
@@ -175,106 +232,54 @@ export const InfrastructureTab = () => {
                         <input className="input-field" type="number" value={rForm.capacity}
                             onChange={e => setRForm({ ...rForm, capacity: Number(e.target.value) })} />
                     </div>
-                    <button className="btn btn-primary" style={{ alignSelf: 'flex-end', height: '42px' }} onClick={() =>
+                    <button className="btn btn-primary" onClick={() => 
                         addEntity('rooms', rForm, () => setRForm({ name: '', type: 'lecture', capacity: 60 }))}>
                         <Plus size={16} /> Add Room
                     </button>
                 </div>
             </div>
-
-            {/* Course & Session Builder */}
-            <div className="glass-panel entity-section">
-                <h3>Unified Course Builder</h3>
+            
+            {/* 4. Course Builder (CRUD allowed) */}
+            <div className="glass-panel entity-section" style={{ marginTop: '1.5rem' }}>
+                <h3>Course Planning</h3>
                 <div className="form-grid">
-                    <div className="input-group">
+                     <div className="input-group">
                         <label className="input-label">Course Name</label>
                         <input className="input-field" placeholder="Algorithms" value={cForm.name}
                             onChange={e => setCForm({ ...cForm, name: e.target.value })} />
                     </div>
                     <div className="input-group">
-                        <label className="input-label">Course Code</label>
-                        <input className="input-field" placeholder="CS201" value={cForm.code}
+                        <label className="input-label">Code</label>
+                        <input className="input-field" placeholder="CS101" value={cForm.code}
                             onChange={e => setCForm({ ...cForm, code: e.target.value })} />
                     </div>
 
-                    {/* Theory Session Builder */}
                     <div className="glass-panel" style={{ gridColumn: '1 / -1', background: 'rgba(255,255,255,0.03)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                            <h4 style={{ margin: 0 }}>Theory Sessions</h4>
-                            <div className="hint-text" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <Info size={14} /> Max 2 hours per slot
-                            </div>
-                        </div>
+                        <h4 style={{ marginBottom: '1rem' }}>Theory Split</h4>
                         <div className="form-row" style={{ alignItems: 'flex-end' }}>
-                            <div className="input-group" style={{ width: '120px' }}>
+                            <div className="input-group" style={{ width: '100px' }}>
                                 <label className="input-label">Total Hrs</label>
                                 <input className="input-field" type="number" value={cForm.theoryTotal}
                                     onChange={e => setCForm({ ...cForm, theoryTotal: Number(e.target.value) })} />
                             </div>
-                            <div className="input-group" style={{ width: '120px' }}>
-                                <label className="input-label">No. of Slots</label>
-                                <input className="input-field" type="number" 
-                                    min={cForm.theoryTotal > 0 ? Math.ceil(cForm.theoryTotal / 2) : 0} 
-                                    max={cForm.theoryTotal} value={cForm.theorySessions.length}
+                            <div className="input-group" style={{ width: '100px' }}>
+                                <label className="input-label">Slots</label>
+                                <input className="input-field" type="number" min={Math.ceil(cForm.theoryTotal/2)} max={cForm.theoryTotal} value={cForm.theorySessions.length}
                                     onChange={e => handleSessionCountChange('theory', Number(e.target.value))} />
-                                {slotErrors.theory && <span className="error-text" style={{ fontSize: '0.7rem', color: 'var(--danger)' }}>{slotErrors.theory}</span>}
                             </div>
-                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
-                                {cForm.theorySessions.map((dur, i) => (
-                                    <div key={i} className="input-group" style={{ width: '70px' }}>
-                                        <label className="input-label">Slot {i+1}</label>
-                                        <input className="input-field" type="number" min="1" max="2" value={dur}
-                                            onChange={e => updateSessionVal('theory', i, e.target.value)} />
-                                    </div>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {cForm.theorySessions.map((d, i) => (
+                                    <input key={i} className="input-field" style={{ width: '60px' }} type="number" value={d}
+                                        onChange={e => updateSessionVal('theory', i, e.target.value)} />
                                 ))}
                             </div>
+                            {slotErrors.theory && <div className="error-text" style={{ fontSize: '0.7rem' }}>{slotErrors.theory}</div>}
                         </div>
                     </div>
 
-                    {/* Lab Session Builder */}
-                    <div className="glass-panel" style={{ gridColumn: '1 / -1', background: 'rgba(255,255,255,0.03)' }}>
-                        <h4 style={{ marginBottom: '1rem' }}>Lab Sessions</h4>
-                        <div className="form-row" style={{ alignItems: 'flex-end' }}>
-                            <div className="input-group" style={{ width: '120px' }}>
-                                <label className="input-label">Total Hrs</label>
-                                <input className="input-field" type="number" value={cForm.labTotal}
-                                    onChange={e => setCForm({ ...cForm, labTotal: Number(e.target.value) })} />
-                            </div>
-                            <div className="input-group" style={{ width: '120px' }}>
-                                <label className="input-label">No. of Slots</label>
-                                <input className="input-field" type="number" 
-                                    min={cForm.labTotal > 0 ? Math.ceil(cForm.labTotal / 2) : 0} 
-                                    max={cForm.labTotal} value={cForm.labSessions.length}
-                                    onChange={e => handleSessionCountChange('lab', Number(e.target.value))} />
-                                {slotErrors.lab && <span className="error-text" style={{ fontSize: '0.7rem', color: 'var(--danger)' }}>{slotErrors.lab}</span>}
-                            </div>
-                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
-                                {cForm.labSessions.map((dur, i) => (
-                                    <div key={i} className="input-group" style={{ width: '70px' }}>
-                                        <label className="input-label">Slot {i+1}</label>
-                                        <input className="input-field" type="number" min="1" max="2" value={dur}
-                                            onChange={e => updateSessionVal('lab', i, e.target.value)} />
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-
-                    <button className="btn btn-primary" style={{ gridColumn: '1 / -1', marginTop: '1rem' }}
-                        onClick={() => addEntity('courses', cForm, () => setCForm({ name: '', code: '', theoryTotal: 3, theorySessions: [2, 1], labTotal: 0, labSessions: [] }))}>
-                        Create Unified Course with Session Plan
+                    <button className="btn btn-primary" style={{ gridColumn: '1 / -1' }} onClick={() => addEntity('courses', cForm, () => setCForm({ name: '', code: '', theoryTotal: 3, theorySessions: [2, 1], labTotal: 0, labSessions: [] }))}>
+                        Create Unified Course
                     </button>
-                </div>
-
-                <div className="entity-chips" style={{ marginTop: '1.5rem' }}>
-                    {courses.map(c => (
-                        <span key={c._id} className="chip">
-                            <strong>{c.name} ({c.code})</strong> — 
-                            {c.theoryTotal > 0 && ` Th: ${c.theorySessions.join('+')}=${c.theoryTotal}h`}
-                            {c.labTotal > 0 && ` | Lb: ${c.labSessions.join('+')}=${c.labTotal}h`}
-                            <Trash2 size={14} className="chip-delete" onClick={() => deleteEntity('courses', c._id)} />
-                        </span>
-                    ))}
                 </div>
             </div>
         </div>

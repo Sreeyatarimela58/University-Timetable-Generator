@@ -4,7 +4,14 @@ const programSchema = new mongoose.Schema({
     name: {
         type: String,
         required: true,
-        trim: true
+        trim: true,
+        unique: true
+    },
+    durationYears: {
+        type: Number,
+        required: true,
+        min: 1,
+        max: 8
     }
 }, { timestamps: true });
 

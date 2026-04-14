@@ -40,6 +40,10 @@ const timetableSchema = new mongoose.Schema({
     isLocked: {
         type: Boolean,
         default: false
+    },
+    isArchived: {
+        type: Boolean,
+        default: false
     }
 }, { timestamps: true });
 
