@@ -4,18 +4,44 @@ import { Plus, X } from 'lucide-react';
 
 export const CoursesTab = () => {
     const [courses, setCourses] = useState([]);
+    const [programs, setPrograms] = useState([]);
+    const [academicYears, setAcademicYears] = useState([]);
     const [msg, setMsg] = useState({ text: '', isError: false });
-    const [cForm, setCForm] = useState({ name: '', code: '', theoryTotal: 3, theorySessions: [2, 1], labTotal: 0, labSessions: [] });
+    const [cForm, setCForm] = useState({ 
+        programId: '', 
+        yearId: '', 
+        name: '', 
+        code: '', 
+        theoryTotal: 3, 
+        theorySessions: [2, 1], 
+        labTotal: 0, 
+        labSessions: [] 
+    });
     const [slotErrors, setSlotErrors] = useState({ theory: '', lab: '' });
 
     const load = async () => {
         try {
-            const res = await api.get('/courses');
-            setCourses(res.data);
+            const [c, p, y] = await Promise.all([
+                api.get('/courses'),
+                api.get('/programs'),
+                api.get('/academicyears')
+            ]);
+            setCourses(c.data);
+            setPrograms(p.data);
+            setAcademicYears(y.data);
         } catch (e) { console.error(e); }
     };
 
     useEffect(() => { load(); }, []);
+
+    // Helper to get years for selected program
+    const filteredYears = academicYears.filter(y => {
+        const pId = typeof y.programId === 'object' ? y.programId?._id : y.programId;
+        return pId === cForm.programId;
+    }).sort((a,b) => a.yearNumber - b.yearNumber);
+
+    // Filtered courses for display
+    const filteredCourses = courses.filter(c => c.yearId === cForm.yearId || (typeof c.yearId === 'object' && c.yearId?._id === cForm.yearId));
 
     const showMsg = (text, isError = false) => {
         setMsg({ text, isError });
@@ -56,10 +82,14 @@ export const CoursesTab = () => {
     };
 
     const addCourse = async () => {
+        if (!cForm.programId || !cForm.yearId || !cForm.name || !cForm.code) {
+            return showMsg('Please complete all identification fields (Program, Year, Name, Code).', true);
+        }
+
         try {
             await api.post('/courses', cForm);
             showMsg('Course structure finalized.');
-            setCForm({ name: '', code: '', theoryTotal: 3, theorySessions: [2, 1], labTotal: 0, labSessions: [] });
+            setCForm({ ...cForm, name: '', code: '', theoryTotal: 3, theorySessions: [2, 1], labTotal: 0, labSessions: [] });
             load();
         } catch (err) {
             showMsg(err.response?.data?.error || 'Failed to create course', true);
@@ -81,8 +111,34 @@ export const CoursesTab = () => {
             )}
 
             <div style={{ maxWidth: '900px', display: 'flex', flexDirection: 'column', gap: '32px' }}>
-                {/* Core Identity */}
+                {/* Hierarchy & Identity */}
                 <div className="apple-card" style={{ padding: '28px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
+                        <div className="input-group">
+                            <label className="input-label">Program</label>
+                            <select 
+                                className="input-field"
+                                value={cForm.programId}
+                                onChange={e => setCForm({ ...cForm, programId: e.target.value, yearId: '' })}
+                            >
+                                <option value="">Select Program</option>
+                                {programs.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
+                            </select>
+                        </div>
+                        <div className="input-group">
+                            <label className="input-label">Academic Year</label>
+                            <select 
+                                className="input-field"
+                                value={cForm.yearId}
+                                onChange={e => setCForm({ ...cForm, yearId: e.target.value })}
+                                disabled={!cForm.programId}
+                            >
+                                <option value="">Select Year</option>
+                                {filteredYears.map(y => <option key={y._id} value={y._id}>Year {y.yearNumber}</option>)}
+                            </select>
+                        </div>
+                    </div>
+
                     <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '28px' }}>
                         <div className="input-group">
                             <label className="input-label">Course Identification Name</label>
@@ -231,7 +287,7 @@ export const CoursesTab = () => {
                     <div style={{ display: 'flex', gap: '12px' }}>
                         <button
                             className="btn btn-ghost"
-                            onClick={() => setCForm({ name: '', code: '', theoryTotal: 3, theorySessions: [2, 1], labTotal: 0, labSessions: [] })}
+                            onClick={() => setCForm({ ...cForm, name: '', code: '', theoryTotal: 3, theorySessions: [2, 1], labTotal: 0, labSessions: [] })}
                         >
                             <X size={16} /> Discard
                         </button>
@@ -246,25 +302,33 @@ export const CoursesTab = () => {
                 </div>
 
                 {/* Existing Courses Summary */}
-                {courses.length > 0 && (
+                {cForm.yearId && (
                     <div style={{ marginTop: '40px' }}>
-                        <label className="input-label" style={{ marginBottom: '16px', display: 'block' }}>Existing Courses ({courses.length})</label>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '16px' }}>
-                            {courses.map(c => (
-                                <div key={c._id} className="apple-card" style={{ padding: '20px' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                                        <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                                            {c.code}
-                                        </span>
+                        <label className="input-label" style={{ marginBottom: '16px', display: 'block' }}>
+                            Courses in Selected Year ({filteredCourses.length})
+                        </label>
+                        {filteredCourses.length === 0 ? (
+                            <div className="apple-card" style={{ padding: '40px', textAlign: 'center', opacity: 0.6 }}>
+                                <p>No courses registered for this academic year yet.</p>
+                            </div>
+                        ) : (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '16px' }}>
+                                {filteredCourses.map(c => (
+                                    <div key={c._id} className="apple-card" style={{ padding: '20px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                                                {c.code}
+                                            </span>
+                                        </div>
+                                        <p style={{ fontWeight: 700, fontSize: '14px' }}>{c.name}</p>
+                                        <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                                            {c.theoryTotal > 0 && <span className="chip chip-primary">Theory: {c.theoryTotal}h</span>}
+                                            {c.labTotal > 0   && <span className="chip">Lab: {c.labTotal}h</span>}
+                                        </div>
                                     </div>
-                                    <p style={{ fontWeight: 700, fontSize: '14px' }}>{c.name}</p>
-                                    <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-                                        {c.theoryTotal > 0 && <span className="chip chip-primary">Theory: {c.theoryTotal}h</span>}
-                                        {c.labTotal > 0   && <span className="chip">Lab: {c.labTotal}h</span>}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

@@ -66,7 +66,8 @@ html, body {
 .app-main {
   flex: 1;
   margin-left: 256px;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background: var(--background);
   display: flex;
   flex-direction: column;
@@ -89,8 +90,12 @@ html, body {
 }
 
 .page-content {
-  padding: 40px;
+  padding: 32px 40px;
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
 }
 
 /* ─── Sidebar ─────────────────────────────────────────────── */
@@ -298,25 +303,48 @@ select.input-field { appearance: none; cursor: pointer; background-image: url("d
 .slot-box input { width: 100%; text-align: center; background: transparent; border: none; outline: none; font-size: 1.1rem; font-weight: 700; color: var(--primary); font-family: inherit; }
 
 /* ─── Timetable Grid ──────────────────────────────────────── */
-.tt-wrapper { background: var(--surface-low); border-radius: 24px; border: 1px solid var(--outline); overflow: hidden; }
-.tt-header-row { display: grid; grid-template-columns: 72px repeat(5, 1fr); background: rgba(255,255,255,0.6); border-bottom: 1px solid var(--outline); }
-.tt-day-header { padding: 14px 8px; text-align: center; font-size: 10px; font-weight: 700; color: var(--secondary); text-transform: uppercase; letter-spacing: 0.18em; }
-.tt-body { max-height: 560px; overflow-y: auto; }
+.tt-wrapper { 
+  background: var(--surface-low); 
+  border-radius: 24px; 
+  border: 1px solid var(--outline); 
+  overflow: hidden;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.tt-header-row { 
+  display: grid; 
+  grid-template-columns: 72px repeat(6, 1fr); 
+  background: rgba(255,255,255,0.6); 
+  border-bottom: 1px solid var(--outline);
+  flex-shrink: 0;
+}
+.tt-day-header { padding: 12px 8px; text-align: center; font-size: 10px; font-weight: 700; color: var(--secondary); text-transform: uppercase; letter-spacing: 0.18em; }
+.tt-body { 
+  flex: 1;
+  overflow-y: auto; 
+}
 .tt-body::-webkit-scrollbar { width: 4px; }
 .tt-body::-webkit-scrollbar-thumb { background: var(--outline-strong); border-radius: 4px; }
-.tt-row { display: grid; grid-template-columns: 72px repeat(5, 1fr); border-bottom: 1px solid var(--outline); }
+.tt-row { 
+  display: grid; 
+  grid-template-columns: 72px repeat(6, 1fr); 
+  border-bottom: 1px solid var(--outline);
+  min-height: 60px;
+}
 .tt-row:last-child { border-bottom: none; }
 .tt-time { display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: var(--secondary); padding: 4px; border-right: 1px solid var(--outline); }
-.tt-cell { min-height: 80px; padding: 8px; border-right: 1px solid var(--outline); transition: background 0.2s; }
+.tt-cell { min-height: 60px; padding: 4px; border-right: 1px solid var(--outline); transition: background 0.2s; position: relative; }
 .tt-cell:last-child { border-right: none; }
 .tt-cell:hover { background: rgba(255,255,255,0.8); }
-.tt-cell-inner { background: var(--surface); border-radius: 10px; padding: 10px 12px; height: 100%; box-shadow: var(--shadow-xs); cursor: pointer; transition: all 0.2s; }
+.tt-cell-inner { background: var(--surface); border-radius: 8px; padding: 6px 10px; height: 100%; box-shadow: var(--shadow-xs); cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; justify-content: center; }
 .tt-cell-inner:hover { box-shadow: var(--shadow-sm); transform: translateY(-1px); }
-.tt-cell-code { font-size: 10px; font-weight: 700; color: var(--primary); text-transform: uppercase; margin-bottom: 4px; }
-.tt-cell-name { font-size: 12px; font-weight: 600; color: var(--on-surface); line-height: 1.35; }
-.tt-cell-meta { font-size: 11px; color: var(--secondary); margin-top: 6px; }
+.tt-cell-code { font-size: 9px; font-weight: 700; color: var(--primary); text-transform: uppercase; margin-bottom: 2px; }
+.tt-cell-name { font-size: 11px; font-weight: 600; color: var(--on-surface); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-cell-meta { font-size: 10px; color: var(--secondary); margin-top: 4px; }
 .tt-cell-lunch { display: flex; align-items: center; justify-content: center; height: 100%; }
-.tt-cell-lunch span { font-size: 10px; font-weight: 700; color: var(--secondary); text-transform: uppercase; letter-spacing: 0.12em; }
+.tt-cell-lunch span { font-size: 9px; font-weight: 700; color: var(--secondary); text-transform: uppercase; letter-spacing: 0.12em; }
 .tt-empty { opacity: 0; }
 
 /* ─── Data Table (Users) ──────────────────────────────────── */

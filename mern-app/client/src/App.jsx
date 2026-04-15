@@ -19,7 +19,10 @@ import { ArchivesTab }       from './components/dashboard/ArchivesTab';
 
 // ─── Authenticated Admin Layout ──────────────────────────────
 const AdminLayout = ({ children }) => {
+    const { user } = useAuth();
     const location = useLocation();
+
+    const isFullWidth = user?.role === 'prof' || user?.role === 'student';
 
     // Mapping titles to paths for the TopHeader
     const titles = {
@@ -37,8 +40,8 @@ const AdminLayout = ({ children }) => {
 
     return (
         <div className="app-layout">
-            <Sidebar />
-            <div className="app-main">
+            {!isFullWidth && <Sidebar />}
+            <div className="app-main" style={isFullWidth ? { marginLeft: 0 } : {}}>
                 <TopHeader title={title} />
                 <div className="animate-in">
                     {children}

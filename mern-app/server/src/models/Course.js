@@ -6,8 +6,9 @@ const courseSchema = new mongoose.Schema({
         ref: 'Program',
         required: true
     },
-    yearNumber: {
-        type: Number,
+    yearId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'AcademicYear',
         required: true
     },
     name: {
@@ -18,8 +19,7 @@ const courseSchema = new mongoose.Schema({
     code: {
         type: String,
         required: true,
-        trim: true,
-        unique: true
+        trim: true
     },
     // New Session Builder Schema
     theoryTotal: {
@@ -41,6 +41,9 @@ const courseSchema = new mongoose.Schema({
         default: true
     }
 }, { timestamps: true });
+
+// Correct uniqueness: Code must be unique WITHIN a year, not globally.
+courseSchema.index({ yearId: 1, code: 1 }, { unique: true });
 
 // Validation helper could be added here, but we'll enforce it in the controller/frontend
 export const Course = mongoose.model('Course', courseSchema);

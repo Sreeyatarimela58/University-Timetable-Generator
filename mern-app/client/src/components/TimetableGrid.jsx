@@ -4,8 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { MapPin, Users, RefreshCw } from 'lucide-react';
 import './TimetableGrid.css';
 
-const DAYS  = ['mon', 'tue', 'wed', 'thu', 'fri'];
-const DAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+const DAYS  = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const DAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const TIMES = ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'];
 
 // Color palette per slot index for variety

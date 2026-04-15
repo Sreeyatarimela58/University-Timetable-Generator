@@ -1,9 +1,10 @@
 import React from 'react';
-import { Search, Bell, Settings, User } from 'lucide-react';
+import { Search, Bell, Settings, User, LogOut } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function TopHeader({ title }) {
-    const { user } = useAuth();
+    const { user, logout } = useAuth();
+    const isSpecialist = user?.role === 'prof' || user?.role === 'student';
 
     return (
         <header className="app-header">
@@ -26,6 +27,18 @@ export default function TopHeader({ title }) {
                 <button className="btn btn-ghost btn-icon" aria-label="Settings">
                     <Settings size={20} color="var(--secondary)" />
                 </button>
+                
+                {isSpecialist && (
+                    <button 
+                        className="btn btn-ghost" 
+                        style={{ color: 'var(--error)', gap: '8px', padding: '8px 12px' }}
+                        onClick={logout}
+                    >
+                        <LogOut size={18} />
+                        <span style={{ fontSize: '13px', fontWeight: 600 }}>Sign Out</span>
+                    </button>
+                )}
+
                 <div style={{ width: '1px', height: '24px', background: 'var(--outline)', margin: '0 4px' }} />
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 8px', borderRadius: '20px', cursor: 'pointer' }}>
                     <div style={{
@@ -37,10 +50,10 @@ export default function TopHeader({ title }) {
                     </div>
                     <div style={{ textAlign: 'right' }}>
                         <p style={{ fontSize: '12px', fontWeight: 700, color: 'var(--on-surface)' }}>
-                            {user?.username || 'Admin'}
+                            {user?.username || 'Guest'}
                         </p>
                         <p style={{ fontSize: '9px', fontWeight: 600, color: 'var(--secondary)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                            {user?.role || 'Administrator'}
+                            {user?.role || 'User'}
                         </p>
                     </div>
                 </div>
