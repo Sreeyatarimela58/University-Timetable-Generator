@@ -62,16 +62,29 @@ validate_section_clash_single(A1, [A2|Rest]) :-
     validate_section_clash_single(A1, Rest).
 
 map_assignments_to_json([], []).
-map_assignments_to_json([assign(Sec, Course, T_Int, R_Int, D_Int, S) | Rest], [Dict | RestJson]) :-
-    teacher_data(T_Int, T_Atom, _),
-    room_data(R_Int, R_Atom, _, _),
-    day_data(D_Int, D_Atom),
-    Dict = _{
-        sectionId: Sec,
-        courseId: Course,
-        teacherId: T_Atom,
-        roomId: R_Atom,
-        day: D_Atom,
-        slot: S
-    },
+map_assignments_to_json([assign(Sec, Course, T_Int, R_Int, D_Int, S, Status) | Rest], [Dict | RestJson]) :-
+    ( Status == 1 ->
+        teacher_data(T_Int, T_Atom, _),
+        room_data(R_Int, R_Atom, _, _),
+        day_data(D_Int, D_Atom),
+        Dict = _{
+            sectionId: Sec,
+            courseId: Course,
+            teacherId: T_Atom,
+            roomId: R_Atom,
+            day: D_Atom,
+            slot: S,
+            status: 1
+        }
+    ;
+        Dict = _{
+            sectionId: Sec,
+            courseId: Course,
+            teacherId: 'none',
+            roomId: 'none',
+            day: 'none',
+            slot: 0,
+            status: 0
+        }
+    ),
     map_assignments_to_json(Rest, RestJson).

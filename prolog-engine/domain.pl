@@ -60,11 +60,11 @@ build_groups(Sec, Course, NumGroups, Consecutive, TLen, RLen, FinalAss) :-
     append(GroupList, RestAss, FinalAss).
 
 create_group(List, Sec, Course, TLen, RLen, Teacher, Room, Day, StartSlot) :-
-    Teacher in 1..TLen,
-    Room in 1..RLen,
+    Teacher in 0..TLen,
+    Room in 0..RLen,
     findall(D, solver:day(D), Days),
     length(Days, DLen),
-    Day in 1..DLen,
+    Day in 0..DLen,
 
     findall(S, solver:slot(S), Slots),
     list_to_fdset(Slots, FDSet),
@@ -75,7 +75,11 @@ create_group(List, Sec, Course, TLen, RLen, Teacher, Room, Day, StartSlot) :-
     fill_group(List, Sec, Course, Teacher, Room, Day, StartSlot).
 
 fill_group([], _, _, _, _, _, _).
-fill_group([assign(Sec, Course, Teacher, Room, Day, S) | Rest], Sec, Course, Teacher, Room, Day, S) :-
+fill_group([assign(Sec, Course, Teacher, Room, Day, RealSlot, Status) | Rest], Sec, Course, Teacher, Room, Day, S) :-
+    Status in 0..1,
+    RealSlot in 0..8,
+    Status #= 0 #==> Teacher #= 0 #/\ Room #= 0 #/\ Day #= 0 #/\ RealSlot #= 0,
+    Status #= 1 #==> Teacher #> 0 #/\ Room #> 0 #/\ Day #> 0 #/\ RealSlot #= S,
     NextS #= S + 1,
     fill_group(Rest, Sec, Course, Teacher, Room, Day, NextS).
 

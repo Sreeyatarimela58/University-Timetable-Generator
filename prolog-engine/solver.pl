@@ -19,27 +19,42 @@ main([File]) :-
     consult(File),
     
     ( domain_build(Assignments, _MappingState) ->
-        extract_vars(Assignments, Vars),
+        extract_vars(Assignments, Vars, StatusVars),
         apply_hard_constraints(Assignments),
+        
+        sum(StatusVars, #=, TotalScheduled),
+        length(StatusVars, TotalAssigns),
+        TotalScheduled #=< TotalAssigns, % Upper bound for efficiency
+
         apply_heuristics(Assignments, Score),
-        
-        Strategies = [
-            [ffc, bisect, max(Score)],
-            [ff, bisect, max(Score)],
-            [leftmost, bisect, max(Score)]
-        ],
-        
-        findall(Sol, try_labeling(Strategies, Assignments, Score, Vars, Sol), RawSols),
-        sort(RawSols, UniqueSols),
-        reverse(UniqueSols, SortedSols),
-        take(3, SortedSols, Top3),
-        
-        ( Top3 \= [] ->
-            format_all_solutions(Top3, FormattedSols),
-            Reply = _{ status: "success", solutions: FormattedSols }
+        % DYNAMIC FALLBACK STRATEGY
+        (
+            % Attempt high-quality maximized schedule
+            catch(
+                call_with_time_limit(3.5, (
+                    MinRequired is TotalAssigns * 7 // 10,
+                    TotalScheduled #>= MinRequired,
+                    labeling([max(TotalScheduled), ffc, bisect, max(Score)], Vars),
+                    StateStr = "optimal"
+                )),
+                time_limit_exceeded,
+                (
+                    writeln(user_error, 'TIMEOUT_RECOVERY'), 
+                    once(labeling([ffc], Vars)),
+                    StateStr = "timeout_recovery"
+                )
+            )
         ;
-            Reply = _{ status: "failure", solutions: [] }
-        )
+            % Fallback to any valid solution if quality threshold is impossible
+            writeln(user_error, 'QUALITY_FALLBACK'),
+            once(labeling([ffc], Vars)),
+            StateStr = "partial"
+        ),
+
+        % Collect result
+        ( TotalScheduled == 0 -> FinalState = "infeasible" ; FinalState = StateStr ),
+        format_all_solutions([Score-Assignments], FormattedSols),
+        Reply = _{ status: "success", solverState: FinalState, solutions: FormattedSols }
     ;
         Reply = _{ status: "failure", reason: "domain error", solutions: [] }
     ),
@@ -47,18 +62,13 @@ main([File]) :-
     nl,
     halt(0).
 
-try_labeling(Strategies, Assignments, Score, Vars, Score-Assignments) :-
-    member(Strategy, Strategies),
-    catch(call_with_time_limit(4.5, labeling(Strategy, Vars)), time_limit_exceeded, fail).
-
 take(0, _, []).
-take(_, [], []).
-take(N, [X|Xs], [X|Ys]) :-
-    N > 0, N1 is N - 1, take(N1, Xs, Ys).
+...
+get_tbv([], _, _, _, []).
 
-extract_vars([], []).
-extract_vars([assign(_, _, T, R, D, S) | Rest], [T, R, D, S | Vars]) :-
-    extract_vars(Rest, Vars).
+extract_vars([], [], []).
+extract_vars([assign(_, _, T, R, D, S, Status) | Rest], [T, R, D, S | Vars], [Status | SVars]) :-
+    extract_vars(Rest, Vars, SVars).
 
 % Wrapper predicate for test.js
 solve_from_file(File) :-

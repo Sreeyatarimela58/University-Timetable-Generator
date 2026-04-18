@@ -5,7 +5,6 @@
 % Entry Point
 apply_hard_constraints(Assignments) :-
     apply_pairwise_clashes(Assignments),
-    apply_unique_slots(Assignments),   % 🔥 ADD THIS
     apply_room_rules(Assignments),
     apply_teacher_workload(Assignments),
     apply_fact_unavailable(Assignments),
@@ -23,24 +22,24 @@ apply_pairwise_clashes([A|Rest]) :-
 
 apply_clash_to_rest(_, []).
 apply_clash_to_rest(A1, [A2|Rest]) :-
-    A1 = assign(Sec1, _, T1, R1, D1, S1),
-    A2 = assign(Sec2, _, T2, R2, D2, S2),
+    A1 = assign(Sec1, _, T1, R1, D1, S1, Status1),
+    A2 = assign(Sec2, _, T2, R2, D2, S2, Status2),
 
     SameTime in 0..1,
     SameTime #<==> (D1 #= D2 #/\ S1 #= S2),
 
     % STRICT CLASHES
-    SameTime #==> (T1 #\= T2),   % Teacher clash
-    SameTime #==> (R1 #\= R2),   % Room clash
+    (Status1 #= 1 #/\ Status2 #= 1 #/\ SameTime #= 1) #==> (T1 #\= T2),   % Teacher clash
+    (Status1 #= 1 #/\ Status2 #= 1 #/\ SameTime #= 1) #==> (R1 #\= R2),   % Room clash
 
     % Section cannot have 2 classes at same time
-   (Sec1 = Sec2 -> SameTime #= 0 ; true),
+   (Sec1 == Sec2 -> ((Status1 #= 1 #/\ Status2 #= 1) #==> SameTime #= 0) ; true),
 
     apply_clash_to_rest(A1, Rest).
 
 % 5, 6: Room Capacity & Type
 apply_room_rules([]).
-apply_room_rules([assign(Sec, C, _, R, _, _) | Rest]) :-
+apply_room_rules([assign(Sec, C, _, R, _, _, Status) | Rest]) :-
     solver:section(Sec, Strength),
     solver:course(C, Type, _, _),
     
@@ -52,9 +51,9 @@ apply_room_rules([assign(Sec, C, _, R, _, _) | Rest]) :-
     
     ( ValidRooms \= [] ->
         build_domain(ValidRooms, Dom),
-        R in Dom
+        Status #= 1 #==> R in Dom
     ; 
-        R in 0..0 % Fail if no room matches
+        Status #= 0 % Fail softly by forcing unscheduled
     ),
     apply_room_rules(Rest).
 
@@ -77,9 +76,9 @@ check_teacher_workload([TID|Rest], Assignments) :-
     check_teacher_workload(Rest, Assignments).
 
 count_teacher_slots([], _, []).
-count_teacher_slots([assign(_,_,T,_,_,_)|Rest], TID, [B|BRest]) :-
+count_teacher_slots([assign(_,_,T,_,_,_,Status)|Rest], TID, [B|BRest]) :-
     B in 0..1,
-    B #<==> (T #= TID),
+    B #<==> (Status #= 1 #/\ T #= TID),
     count_teacher_slots(Rest, TID, BRest).
 
 % 8: Teacher Availability & Allowed Teachers
@@ -91,22 +90,22 @@ apply_fact_unavailable(Assignments) :-
     apply_unavs_loop(Assignments, Unavs).
 
 apply_allowed_teachers([]).
-apply_allowed_teachers([assign(Sec, C, T, _, _, _) | Rest]) :-
+apply_allowed_teachers([assign(Sec, C, T, _, _, _, Status) | Rest]) :-
     ( solver:allowed_teachers(C, Sec, AllowedAtoms) ->
         map_teacher_atoms(AllowedAtoms, AllowedInts),
-        ( AllowedInts \= [] -> build_domain(AllowedInts, Dom), T in Dom ; T in 0..0 )
+        ( AllowedInts \= [] -> build_domain(AllowedInts, Dom), Status #= 1 #==> T in Dom ; Status #= 0 )
     ; true ),
     apply_allowed_teachers(Rest).
 
 apply_unavs_loop([], _).
-apply_unavs_loop([assign(_, _, T, _, D, S) | Rest], Unavs) :-
-    apply_unav_single(Unavs, T, D, S),
+apply_unavs_loop([assign(_, _, T, _, D, S, Status) | Rest], Unavs) :-
+    apply_unav_single(Unavs, T, D, S, Status),
     apply_unavs_loop(Rest, Unavs).
 
-apply_unav_single([], _, _, _).
-apply_unav_single([unav(TID, DID, SNum) | Rest], T, D, S) :-
-    (T #= TID #/\ D #= DID) #==> (S #\= SNum),
-    apply_unav_single(Rest, T, D, S).
+apply_unav_single([], _, _, _, _).
+apply_unav_single([unav(TID, DID, SNum) | Rest], T, D, S, Status) :-
+    (Status #= 1 #/\ T #= TID #/\ D #= DID) #==> (S #\= SNum),
+    apply_unav_single(Rest, T, D, S, Status).
 
 % 9: Single Teacher Per Course
 apply_single_teacher_per_course([]).
@@ -116,20 +115,18 @@ apply_single_teacher_per_course([A|Rest]) :-
 
 enforce_single_teacher(_, []).
 enforce_single_teacher(A1, [A2|Rest]) :-
-    A1 = assign(Sec1, C1, T1, _, _, _),
-    A2 = assign(Sec2, C2, T2, _, _, _),
+    A1 = assign(Sec1, C1, T1, _, _, _, Status1),
+    A2 = assign(Sec2, C2, T2, _, _, _, Status2),
     ( Sec1 == Sec2, C1 == C2 ->
-        T1 #= T2
+        (Status1 #= 1 #/\ Status2 #= 1) #==> T1 #= T2
     ; true ),
     enforce_single_teacher(A1, Rest).
 
 % 12: Lab Lunch Restriction
 apply_lab_lunch_rule([]).
-apply_lab_lunch_rule([assign(_, C, _, _, _, S) | Rest]) :-
+apply_lab_lunch_rule([assign(_, C, _, _, _, S, Status) | Rest]) :-
     ( solver:course(C, lab, _, _) ->
-        % A lab cannot occupy BOTH slot 4 and 5
-        % Since lab requires 2 consecutive slots natively, prohibiting StartSlot=4 guarantees it won't cross 4 and 5.
-        S #\= 4
+        Status #= 1 #==> S #\= 4
     ; true ),
     apply_lab_lunch_rule(Rest).
 
@@ -155,10 +152,10 @@ apply_lunch_section_days(Sec, Day, Assignments) :-
     apply_lunch_section_days(Sec, NextDay, Assignments).
 
 get_bool_vars([], _, _, _, []).
-get_bool_vars([assign(SecA, _, _, _, D, Slot)|Rest], Sec, Day, TargetSlot, [B|BRest]) :-
+get_bool_vars([assign(SecA, _, _, _, D, Slot, Status)|Rest], Sec, Day, TargetSlot, [B|BRest]) :-
     B in 0..1,
     (SecA == Sec ->
-        B #<==> (D #= Day #/\ Slot #= TargetSlot)
+        B #<==> (Status #= 1 #/\ D #= Day #/\ Slot #= TargetSlot)
     ; B = 0),
     get_bool_vars(Rest, Sec, Day, TargetSlot, BRest).
 
@@ -176,10 +173,10 @@ apply_tc_days(_, 6, _).
 apply_tc_days(TID, Day, Assignments) :-
     Day =< 5,
     get_teacher_bool_vars(Assignments, TID, Day, 1, [S1,S2,S3,S4,S5,S6,S7,S8]),
-    S1+S2+S3+S4+S5 #=< 4,
-    S2+S3+S4+S5+S6 #=< 4,
-    S3+S4+S5+S6+S7 #=< 4,
-    S4+S5+S6+S7+S8 #=< 4,
+    S1+S2+S3+S4+S5 #=< 5,
+    S2+S3+S4+S5+S6 #=< 5,
+    S3+S4+S5+S6+S7 #=< 5,
+    S4+S5+S6+S7+S8 #=< 5,
     NextDay is Day + 1,
     apply_tc_days(TID, NextDay, Assignments).
 
@@ -191,9 +188,9 @@ get_teacher_bool_vars(Assignments, TID, Day, Slot, [SumB | RestB]) :-
     get_teacher_bool_vars(Assignments, TID, Day, NextSlot, RestB).
 
 get_tbv([], _, _, _, []).
-get_tbv([assign(_, _, T, _, D, S)|Rest], TID, Day, Slot, [B|BRest]) :-
+get_tbv([assign(_, _, T, _, D, S, Status)|Rest], TID, Day, Slot, [B|BRest]) :-
     B in 0..1,
-    B #<==> (T #= TID #/\ D #= Day #/\ S #= Slot),
+    B #<==> (Status #= 1 #/\ T #= TID #/\ D #= Day #/\ S #= Slot),
     get_tbv(Rest, TID, Day, Slot, BRest).
 
 % 15: Section Fatigue
@@ -210,10 +207,10 @@ apply_sc_days(_, 6, _).
 apply_sc_days(Sec, Day, Assignments) :-
     Day =< 5,
     get_sec_bool_vars(Assignments, Sec, Day, 1, [S1,S2,S3,S4,S5,S6,S7,S8]),
-    S1+S2+S3+S4+S5 #=< 4,
-    S2+S3+S4+S5+S6 #=< 4,
-    S3+S4+S5+S6+S7 #=< 4,
-    S4+S5+S6+S7+S8 #=< 4,
+    S1+S2+S3+S4+S5 #=< 5,
+    S2+S3+S4+S5+S6 #=< 5,
+    S3+S4+S5+S6+S7 #=< 5,
+    S4+S5+S6+S7+S8 #=< 5,
     NextDay is Day + 1,
     apply_sc_days(Sec, NextDay, Assignments).
 
@@ -223,15 +220,3 @@ get_sec_bool_vars(Assignments, Sec, Day, Slot, [SumB | RestB]) :-
     sum(ListB, #=, SumB),
     NextSlot is Slot + 1,
     get_sec_bool_vars(Assignments, Sec, Day, NextSlot, RestB).
-
-apply_unique_slots(Assignments) :-
-    findall((Sec,Course), solver:section_course(Sec,Course), Pairs),
-    enforce_unique_slots(Pairs, Assignments).
-
-enforce_unique_slots([], _).
-enforce_unique_slots([(Sec,Course)|Rest], Assignments) :-
-    findall(Slot,
-        member(assign(Sec,Course,_,_,_,Slot), Assignments),
-        Slots),
-    all_distinct(Slots),
-    enforce_unique_slots(Rest, Assignments).
