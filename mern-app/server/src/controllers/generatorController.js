@@ -34,18 +34,21 @@ const DAYS_LENGTH = 5;
 const SLOTS_LENGTH = 8;
 const maxRoomSlots = DAYS_LENGTH * SLOTS_LENGTH;
 
+const safeId = (id) => `id_${id.toString().replace(/[^a-zA-Z0-9]/g, '')}`;
+
 const generateSystemFacts = (teachers, rooms, sections, courses, assignments, teacherBlockSet = new Set(), roomBlockSet = new Set()) => {
-    let facts = '';
-    teachers.forEach(t => facts += `teacher(id_${t._id}, ${t.maxHoursPerWeek}).\n`);
-    rooms.forEach(r => facts += `room(id_${r._id}, ${r.type}, ${r.capacity}).\n`);
-    sections.forEach(s => facts += `section(id_${s._id}, ${s.strength}).\n`);
+    let facts = ':- discontiguous section_course/2.\n:- discontiguous allowed_teachers/3.\n\n';
+    
+    teachers.forEach(t => facts += `teacher(${safeId(t._id)}, ${t.maxHoursPerWeek}).\n`);
+    rooms.forEach(r => facts += `room(${safeId(r._id)}, ${r.type}, ${r.capacity}).\n`);
+    sections.forEach(s => facts += `section(${safeId(s._id)}, ${s.strength}).\n`);
     
     courses.forEach(c => {
         if (c.theorySessions?.length) {
-            c.theorySessions.forEach((duration, i) => facts += `course(id_${c._id}_T_${i}, theory, ${duration}, ${duration}).\n`);
+            c.theorySessions.forEach((duration, i) => facts += `course(${safeId(c._id)}_T_${i}, theory, ${duration}, ${duration}).\n`);
         }
         if (c.labSessions?.length) {
-            c.labSessions.forEach((duration, i) => facts += `course(id_${c._id}_L_${i}, lab, ${duration}, ${duration}).\n`);
+            c.labSessions.forEach((duration, i) => facts += `course(${safeId(c._id)}_L_${i}, lab, ${duration}, ${duration}).\n`);
         }
     });
 
@@ -55,30 +58,30 @@ const generateSystemFacts = (teachers, rooms, sections, courses, assignments, te
 
         if (course.theorySessions?.length && a.theoryTeacherIds?.length) {
             course.theorySessions.forEach((_, i) => {
-                const subId = `id_${course._id}_T_${i}`;
-                facts += `section_course(id_${a.sectionId}, ${subId}).\n`;
-                facts += `allowed_teachers(${subId}, id_${a.sectionId}, [${a.theoryTeacherIds.map(id => `id_${id}`).join(', ')}]).\n`;
+                const subId = `${safeId(course._id)}_T_${i}`;
+                facts += `section_course(${safeId(a.sectionId)}, ${subId}).\n`;
+                facts += `allowed_teachers(${subId}, ${safeId(a.sectionId)}, [${a.theoryTeacherIds.map(id => safeId(id)).join(', ')}]).\n`;
             });
         }
 
         if (course.labSessions?.length && a.labTeacherIds?.length) {
             course.labSessions.forEach((_, i) => {
-                const subId = `id_${course._id}_L_${i}`;
-                facts += `section_course(id_${a.sectionId}, ${subId}).\n`;
-                facts += `allowed_teachers(${subId}, id_${a.sectionId}, [${a.labTeacherIds.map(id => `id_${id}`).join(', ')}]).\n`;
+                const subId = `${safeId(course._id)}_L_${i}`;
+                facts += `section_course(${safeId(a.sectionId)}, ${subId}).\n`;
+                facts += `allowed_teachers(${subId}, ${safeId(a.sectionId)}, [${a.labTeacherIds.map(id => safeId(id)).join(', ')}]).\n`;
             });
         }
     });
 
-    teachers.forEach(t => t.unavailableSlots?.forEach(s => facts += `unavailable(id_${t._id}, ${s.day}, ${s.slot}).\n`));
+    teachers.forEach(t => t.unavailableSlots?.forEach(s => facts += `unavailable(${safeId(t._id)}, ${s.day}, ${s.slot}).\n`));
     
     teacherBlockSet.forEach(block => {
         const [tid, d, s] = block.split('-');
-        facts += `unavailable(id_${tid}, ${d}, ${s}).\n`;
+        facts += `unavailable(${safeId(tid)}, ${d}, ${s}).\n`;
     });
     roomBlockSet.forEach(block => {
         const [rid, d, s] = block.split('-');
-        facts += `unavailable_room(id_${rid}, ${d}, ${s}).\n`;
+        facts += `unavailable_room(${safeId(rid)}, ${d}, ${s}).\n`;
     });
 
     facts += '\n% The Grid\n';
