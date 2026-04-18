@@ -10,6 +10,10 @@ const teacherSchema = new mongoose.Schema({
         type: Number,
         required: true
     },
+    specialization: {
+        type: String,
+        enum: ['CSE', 'ECE', 'MBA']
+    },
     unavailableSlots: [{
         day: {
             type: String,

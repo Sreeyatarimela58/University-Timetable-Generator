@@ -178,3 +178,20 @@ export const remove = async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 };
+
+export const getStats = async (req, res) => {
+    try {
+        const [programs, courses, rooms] = await Promise.all([
+            models.Program.countDocuments(),
+            models.Course.countDocuments(),
+            models.Room.countDocuments()
+        ]);
+        res.json({
+            programs,
+            courses,
+            rooms
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
