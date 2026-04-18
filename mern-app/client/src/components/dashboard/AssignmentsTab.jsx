@@ -57,17 +57,19 @@ export const AssignmentsTab = () => {
     };
 
     return (
-        <div className="animate-in" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '32px', alignItems: 'start' }}>
+        <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
 
-            {/* Form Panel */}
-            <div className="section-panel">
-                <div className="section-header">
-                    <Link size={20} color="var(--primary)" />
-                    <h3 className="section-title">New Assignment</h3>
+            {/* Form Panel - 3 Horizontal Cards */}
+            <div className="section-panel" style={{ padding: '32px', border: 'none', background: 'transparent' }}>
+                <div style={{ marginBottom: '24px' }}>
+                    <div className="section-header" style={{ marginBottom: '8px' }}>
+                        <Link size={20} color="var(--primary)" />
+                        <h3 className="section-title">New Assignment</h3>
+                    </div>
+                    <p style={{ fontSize: '13px', color: 'var(--secondary)', lineHeight: 1.6 }}>
+                        Link a Section → Course → Teachers for Theory & Lab sessions.
+                    </p>
                 </div>
-                <p style={{ fontSize: '13px', color: 'var(--secondary)', marginBottom: '24px', lineHeight: 1.6 }}>
-                    Link a Section → Course → Teachers for Theory & Lab sessions.
-                </p>
 
                 {msg.text && (
                     <div className={`alert ${msg.isError ? 'alert-error' : 'alert-success'}`} style={{ marginBottom: '20px' }}>
@@ -75,68 +77,113 @@ export const AssignmentsTab = () => {
                     </div>
                 )}
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                    <div className="input-group">
-                        <label className="input-label">Target Section</label>
-                        <select className="input-field" value={aForm.sectionId}
-                            onChange={e => setAForm({ ...aForm, sectionId: e.target.value })}>
-                            <option value="">— Select Section —</option>
-                            {sections.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-                        </select>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px' }}>
+                    
+                    {/* Card 1: Details */}
+                    <div className="apple-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                        <div className="input-group">
+                            <label className="input-label">Target Section</label>
+                            <select className="input-field" value={aForm.sectionId}
+                                onChange={e => setAForm({ ...aForm, sectionId: e.target.value })}>
+                                <option value="">— Select Section —</option>
+                                {sections.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+                            </select>
+                        </div>
+
+                        <div className="input-group">
+                            <label className="input-label">Course</label>
+                            <select className="input-field" value={aForm.courseId}
+                                onChange={e => setAForm({ ...aForm, courseId: e.target.value, theoryTeacherIds: [], labTeacherIds: [] })}>
+                                <option value="">— Select Course —</option>
+                                {courses.map(c => <option key={c._id} value={c._id}>{c.name} ({c.code})</option>)}
+                            </select>
+                        </div>
                     </div>
 
-                    <div className="input-group">
-                        <label className="input-label">Course</label>
-                        <select className="input-field" value={aForm.courseId}
-                            onChange={e => setAForm({ ...aForm, courseId: e.target.value, theoryTeacherIds: [], labTeacherIds: [] })}>
-                            <option value="">— Select Course —</option>
-                            {courses.map(c => <option key={c._id} value={c._id}>{c.name} ({c.code})</option>)}
-                        </select>
+                    {/* Card 2: Theory */}
+                    <div className="apple-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
+                        {selectedCourse?.theoryTotal > 0 ? (
+                            <div className="input-group" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                                <label className="input-label" style={{ marginBottom: '12px' }}>Theory Teacher(s)</label>
+                                <div className="input-field" style={{ flex: 1, maxHeight: '200px', overflowY: 'auto', padding: '8px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    {teachers.map(t => (
+                                        <label key={`theory-${t._id}`} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', cursor: 'pointer', padding: '6px 8px', borderRadius: '8px' }}>
+                                            <input type="checkbox"
+                                                checked={aForm.theoryTeacherIds.includes(t._id)}
+                                                onChange={e => {
+                                                    const checked = e.target.checked;
+                                                    setAForm(prev => ({
+                                                        ...prev,
+                                                        theoryTeacherIds: checked
+                                                            ? [...prev.theoryTeacherIds, t._id]
+                                                            : prev.theoryTeacherIds.filter(id => id !== t._id)
+                                                    }));
+                                                }}
+                                                style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--primary)' }}
+                                            />
+                                            {t.name}
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : (
+                            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-low)', borderRadius: '12px', padding: '20px', border: '1px dashed var(--outline)' }}>
+                                <p style={{ fontSize: '13px', color: 'var(--secondary)' }}>{selectedCourse ? 'No Theory Hours' : 'Select a course first'}</p>
+                            </div>
+                        )}
                     </div>
 
-                    {selectedCourse?.theoryTotal > 0 && (
-                        <div className="input-group">
-                            <label className="input-label">Theory Teacher(s)</label>
-                            <select className="input-field" multiple
-                                value={aForm.theoryTeacherIds}
-                                onChange={e => setAForm({ ...aForm, theoryTeacherIds: Array.from(e.target.selectedOptions, o => o.value) })}
-                                style={{ minHeight: '100px', borderRadius: '12px', padding: '8px' }}>
-                                {teachers.map(t => <option key={t._id} value={t._id}>{t.name}</option>)}
-                            </select>
-                            <span style={{ fontSize: '11px', color: 'var(--secondary)' }}>Hold Ctrl / ⌘ to select multiple</span>
-                        </div>
-                    )}
+                    {/* Card 3: Lab & Submit */}
+                    <div className="apple-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        {selectedCourse?.labTotal > 0 ? (
+                            <div className="input-group" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                <label className="input-label" style={{ marginBottom: '12px' }}>Lab Teacher(s)</label>
+                                <div className="input-field" style={{ flex: 1, maxHeight: '140px', overflowY: 'auto', padding: '8px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    {teachers.map(t => (
+                                        <label key={`lab-${t._id}`} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', cursor: 'pointer', padding: '6px 8px', borderRadius: '8px' }}>
+                                            <input type="checkbox"
+                                                checked={aForm.labTeacherIds.includes(t._id)}
+                                                onChange={e => {
+                                                    const checked = e.target.checked;
+                                                    setAForm(prev => ({
+                                                        ...prev,
+                                                        labTeacherIds: checked
+                                                            ? [...prev.labTeacherIds, t._id]
+                                                            : prev.labTeacherIds.filter(id => id !== t._id)
+                                                    }));
+                                                }}
+                                                style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--primary)' }}
+                                            />
+                                            {t.name}
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : (
+                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-low)', borderRadius: '12px', padding: '20px', border: '1px dashed var(--outline)' }}>
+                                <p style={{ fontSize: '13px', color: 'var(--secondary)' }}>{selectedCourse ? 'No Lab Hours' : 'Select a course first'}</p>
+                            </div>
+                        )}
 
-                    {selectedCourse?.labTotal > 0 && (
-                        <div className="input-group">
-                            <label className="input-label">Lab Teacher(s)</label>
-                            <select className="input-field" multiple
-                                value={aForm.labTeacherIds}
-                                onChange={e => setAForm({ ...aForm, labTeacherIds: Array.from(e.target.selectedOptions, o => o.value) })}
-                                style={{ minHeight: '100px', borderRadius: '12px', padding: '8px' }}>
-                                {teachers.map(t => <option key={t._id} value={t._id}>{t.name}</option>)}
-                            </select>
-                            <span style={{ fontSize: '11px', color: 'var(--secondary)' }}>Hold Ctrl / ⌘ to select multiple</span>
-                        </div>
-                    )}
+                        <button
+                            className="btn btn-primary"
+                            style={{ width: '100%', padding: '13px', borderRadius: '14px', marginTop: 'auto' }}
+                            onClick={addAssignment}
+                            disabled={!aForm.sectionId || !aForm.courseId}
+                        >
+                            <Plus size={16} /> Assign Course
+                        </button>
+                    </div>
 
-                    <button
-                        className="btn btn-primary"
-                        style={{ width: '100%', padding: '13px', borderRadius: '14px' }}
-                        onClick={addAssignment}
-                        disabled={!aForm.sectionId || !aForm.courseId}
-                    >
-                        <Plus size={16} /> Assign Course to Section
-                    </button>
                 </div>
             </div>
 
             {/* Assignments List + Faculty Info */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '32px', alignItems: 'start', padding: '0 32px 32px' }}>
 
                 {/* Assignment Cards */}
-                <div>
-                    <div className="section-header">
+                <div className="section-panel">
+                    <div className="section-header" style={{ marginBottom: '24px' }}>
                         <h3 className="section-title" style={{ fontSize: '17px' }}>
                             Active Assignments
                             <span style={{ marginLeft: '8px', fontSize: '12px', fontWeight: 600, color: 'var(--secondary)' }}>({assignments.length})</span>
@@ -180,14 +227,14 @@ export const AssignmentsTab = () => {
 
                 {/* Faculty Workload Summary */}
                 {teachers.length > 0 && (
-                    <div className="apple-card" style={{ padding: '24px' }}>
+                    <div className="section-panel" style={{ padding: '24px' }}>
                         <div className="section-header" style={{ marginBottom: '16px' }}>
                             <Users size={18} color="var(--secondary)" />
                             <h4 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--on-surface)' }}>Faculty Workload</h4>
                         </div>
-                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                             {teachers.map(t => (
-                                <span key={t._id} className="chip" style={{ padding: '6px 12px', fontSize: '11px' }}>
+                                <span key={t._id} className="chip" style={{ padding: '6px 12px', fontSize: '11px', background: 'var(--surface)', border: '1px solid var(--outline)' }}>
                                     {t.name} · {t.maxHoursPerWeek}h/wk
                                 </span>
                             ))}
