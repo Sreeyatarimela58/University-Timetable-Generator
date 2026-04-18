@@ -43,7 +43,7 @@ eval_parallel_slots(Day, Slot, MaxSlot, Assignments, Acc, Total) :-
     eval_parallel_slots(Day, NextSlot, MaxSlot, Assignments, NextAcc, Total).
 
 count_sections_in_slot([], _, _, 0).
-count_sections_in_slot([assign(_, _, _, _, D, S)|Rest], Day, Slot, Count) :-
+count_sections_in_slot([assign(_, _, _, _, D, S, _)|Rest], Day, Slot, Count) :-
     count_sections_in_slot(Rest, Day, Slot, RestCount),
     (D #= Day, S #= Slot -> Count #= RestCount + 1 ; Count = RestCount).
 
@@ -69,7 +69,7 @@ eval_compactness_loop([(Sec, C)|Rest], Assignments, Acc, Total) :-
 
 get_course_slot_range(Assignments, TargetSec, TargetCourse, MinSlot, MaxSlot) :-
     findall(S, (
-        member(assign(Sec, C, _, _, _, S), Assignments),
+        member(assign(Sec, C, _, _, _, S, _), Assignments),
         Sec == TargetSec,
         C == TargetCourse
     ), Slots),
@@ -89,7 +89,7 @@ eval_cluster_penalty(Assignments, Penalty) :-
 cluster_loop([], _, P, P).
 cluster_loop([(Sec,C)|Rest], A, Acc, Total) :-
     findall(Day,
-        member(assign(Sec,C,_,_,Day,_), A),
+        member(assign(Sec,C,_,_,Day,_,_), A),
         Days),
     sort(Days, UniqueDays),
 
@@ -124,7 +124,7 @@ get_days_active(Assignments, Sec, C, [M, T, W, Th, F]) :-
     check_day_active(Assignments, Sec, C, 5, F).
 
 check_day_active([], _, _, _, 0).
-check_day_active([assign(S1, C1, _, _, D1, _)|Rest], Sec, C, Day, Active) :-
+check_day_active([assign(S1, C1, _, _, D1, _, _)|Rest], Sec, C, Day, Active) :-
     check_day_active(Rest, Sec, C, Day, RestActive),
     Match in 0..1,
     (S1 == Sec, C1 == C -> Match #<==> (D1 #= Day) ; Match = 0),
@@ -134,7 +134,7 @@ check_day_active([assign(S1, C1, _, _, D1, _)|Rest], Sec, C, Day, Active) :-
 % LATE SLOT PENALTY
 % =====================================================================
 eval_late_slots([], 0).
-eval_late_slots([assign(_, _, _, _, _, S)|Rest], Penalty) :-
+eval_late_slots([assign(_, _, _, _, _, S, _)|Rest], Penalty) :-
     eval_late_slots(Rest, RestPenalty),
     Late in 0..1,
     Late #<==> (S #>= 7),
@@ -170,7 +170,7 @@ eval_rc_days(Sec, Day, Assignments, Acc, Total) :-
     eval_rc_days(Sec, NextDay, Assignments, NextAcc, Total).
 
 extract_rooms_for_day([], _, _, _, 0).
-extract_rooms_for_day([assign(S1, _, _, R1, D1, Sl1)|Rest], Sec, Day, Slot, Out) :-
+extract_rooms_for_day([assign(S1, _, _, R1, D1, Sl1, _)|Rest], Sec, Day, Slot, Out) :-
     extract_rooms_for_day(Rest, Sec, Day, Slot, RestOut),
     (S1 == Sec ->
         Match in 0..1,

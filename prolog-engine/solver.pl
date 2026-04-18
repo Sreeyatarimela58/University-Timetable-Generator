@@ -1,6 +1,6 @@
 :- module(solver, [main/1, solve_from_file/1]).
 :- use_module(library(clpfd)).
-:- use_module(library(http/json)).
+:- use_module(library(json)).
 :- use_module(library(time)).
 
 :- use_module(domain).
@@ -61,10 +61,6 @@ main([File]) :-
     json_write_dict(current_output, Reply),
     nl,
     halt(0).
-
-take(0, _, []).
-...
-get_tbv([], _, _, _, []).
 
 extract_vars([], [], []).
 extract_vars([assign(_, _, T, R, D, S, Status) | Rest], [T, R, D, S | Vars], [Status | SVars]) :-
