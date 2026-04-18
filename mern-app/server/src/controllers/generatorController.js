@@ -34,7 +34,7 @@ const DAYS_LENGTH = 5;
 const SLOTS_LENGTH = 8;
 const maxRoomSlots = DAYS_LENGTH * SLOTS_LENGTH;
 
-const generateSystemFacts = (teachers, rooms, sections, courses, assignments) => {
+const generateSystemFacts = (teachers, rooms, sections, courses, assignments, teacherBlockSet = new Set(), roomBlockSet = new Set()) => {
     let facts = '';
     teachers.forEach(t => facts += `teacher(id_${t._id}, ${t.maxHoursPerWeek}).\n`);
     rooms.forEach(r => facts += `room(id_${r._id}, ${r.type}, ${r.capacity}).\n`);
@@ -71,16 +71,45 @@ const generateSystemFacts = (teachers, rooms, sections, courses, assignments) =>
     });
 
     teachers.forEach(t => t.unavailableSlots?.forEach(s => facts += `unavailable(id_${t._id}, ${s.day}, ${s.slot}).\n`));
+    
+    teacherBlockSet.forEach(block => {
+        const [tid, d, s] = block.split('-');
+        facts += `unavailable(id_${tid}, ${d}, ${s}).\n`;
+    });
+    roomBlockSet.forEach(block => {
+        const [rid, d, s] = block.split('-');
+        facts += `unavailable_room(id_${rid}, ${d}, ${s}).\n`;
+    });
+
     facts += '\n% The Grid\n';
     facts += 'day(mon). day(tue). day(wed). day(thu). day(fri).\n';
     facts += 'slot(1). slot(2). slot(3). slot(4). slot(5). slot(6). slot(7). slot(8).\n';
     return facts;
 };
 
+const activeRequests = new Map();
+
 export const generateDrafts = async (req, res) => {
+    const { programId, yearId } = req.body || {};
+    if (!programId || !yearId) return res.status(400).json({ error: 'programId and yearId are required for target scoping.' });
+
+    const generation = await models.Generation.findOne({ status: 'ACTIVE' });
+    if (!generation) return res.status(400).json({ error: 'No ACTIVE generation cycle found.' });
+    const generationId = generation._id;
+
+    const requestKey = `${programId}-${yearId}-${generationId}`;
+    if (activeRequests.has(requestKey) && Date.now() - activeRequests.get(requestKey) < 5000) {
+        return res.status(429).json({ error: 'Duplicate generation request blocked.' });
+    }
+    activeRequests.set(requestKey, Date.now());
+    setTimeout(() => activeRequests.delete(requestKey), 5000);
+
     if (isGenerating) {
         return res.status(423).json({ error: 'Generation already in progress.' });
     }
+
+    const pendingDrafts = await models.DraftTimetable.countDocuments();
+    if (pendingDrafts > 0) return res.status(400).json({ error: 'Please publish or clear pending drafts before generating new scopes.' });
 
     isGenerating = true;
 
@@ -98,19 +127,76 @@ export const generateDrafts = async (req, res) => {
         if (count > 0) baselineAvg = sum / count;
     }
 
-    let totalSessions = 0, totalSlots = 0, teacherCapacity = 0;
+    let totalSessions = 0, totalSlots = 0;
 
-    try {
-        console.log('Starting drift generation...');
-        const teachers    = await models.Teacher.find();
-        const rooms       = await models.Room.find();
-        const sections    = await models.Section.find();
-        const courses     = await models.Course.find();
-        let assignments = await models.CourseAssignment.find();
+    try { // OUTER try — guarantees isGenerating reset in finally
+        console.log(`Starting targeted drift generation for Program: ${programId}, Year: ${yearId}`);
+        const sections = await models.Section.find({ programId, yearId });
+        if (!sections.length) return res.status(400).json({ error: 'No sections found for target scope.' });
+        
+        const sectionIds = sections.map(s => s._id);
+        let assignments = await models.CourseAssignment.find({ sectionId: { $in: sectionIds } });
+        const courses = await models.Course.find(); 
+
+        const teacherIdsSet = new Set();
+        assignments.forEach(a => {
+             if (a.theoryTeacherIds) a.theoryTeacherIds.forEach(t => teacherIdsSet.add(t.toString()));
+             if (a.labTeacherIds) a.labTeacherIds.forEach(t => teacherIdsSet.add(t.toString()));
+        });
+        const teacherIdsArr = Array.from(teacherIdsSet);
+        const teachers = await models.Teacher.find({ _id: { $in: teacherIdsArr } });
+        
+        const rooms = await models.Room.find();
+        const roomIdsArr = rooms.map(r => r._id.toString());
 
         if (!teachers.length || !rooms.length || !sections.length || !courses.length) {
             return res.status(400).json({ error: 'Insufficient data for generation.' });
         }
+
+        // --- CONSTRAINT PROJECTION OVERLAY ---
+        const external = await models.Timetable.find({
+            generationId: generationId,
+            $and: [
+                {
+                    $or: [
+                        { teacherId: { $in: teacherIdsArr } },
+                        { roomId: { $in: roomIdsArr } }
+                    ]
+                },
+                {
+                    $or: [
+                        { programId: { $ne: programId } },
+                        { yearId: { $ne: yearId } }
+                    ]
+                }
+            ]
+        });
+
+        const teacherBlockSet = new Set();
+        const roomBlockSet = new Set();
+
+        external.forEach(e => {
+            if (teacherIdsArr.includes(e.teacherId.toString())) {
+                teacherBlockSet.add(`${e.teacherId}-${e.day}-${e.slot}`);
+            }
+            if (roomIdsArr.includes(e.roomId.toString())) {
+                roomBlockSet.add(`${e.roomId}-${e.day}-${e.slot}`);
+            }
+        });
+
+        const availabilityScore = (tid) => {
+            let blocked = 0;
+            teacherBlockSet.forEach(b => { if (b.startsWith(tid)) blocked++; });
+            const teacher = teachers.find(t => t._id.toString() === tid);
+            if (teacher && teacher.unavailableSlots) blocked += teacher.unavailableSlots.length;
+            return blocked;
+        };
+
+        assignments.forEach(a => {
+            if (a.theoryTeacherIds) a.theoryTeacherIds.sort((t1, t2) => availabilityScore(t1.toString()) - availabilityScore(t2.toString()));
+            if (a.labTeacherIds) a.labTeacherIds.sort((t1, t2) => availabilityScore(t1.toString()) - availabilityScore(t2.toString()));
+        });
+        // -------------------------------------
 
         totalSlots = rooms.length * maxRoomSlots;
         totalSessions = assignments.reduce((acc, a) => {
@@ -122,17 +208,53 @@ export const generateDrafts = async (req, res) => {
         if (totalSessions > totalSlots) throw new Error("INSUFFICIENT ROOM CAPACITY");
 
         assignments = faker.helpers.shuffle(assignments);
-        assignments.sort((a, b) => {
-            const aPool = (a.theoryTeacherIds?.length || 0) + (a.labTeacherIds?.length || 0);
-            const bPool = (b.theoryTeacherIds?.length || 0) + (b.labTeacherIds?.length || 0);
-            return aPool - bPool;
-        });
+        const getDifficultyScore = (a) => {
+            const course = courses.find(c => c._id.toString() === a.courseId.toString());
+            const hoursPerWeek = (course?.theorySessions?.reduce((sum, h) => sum + h, 0) || 0) + (course?.labSessions?.reduce((sum, h) => sum + h, 0) || 0);
+            const isLab = (course?.labSessions?.length || 0) > 0;
+            const teacherPoolSize = (a.theoryTeacherIds?.length || 0) + (a.labTeacherIds?.length || 0);
+            return (isLab ? 10 : 2) + (hoursPerWeek * 3) - (teacherPoolSize * 2);
+        };
+        assignments.sort((a, b) => getDifficultyScore(b) - getDifficultyScore(a));
 
-        const facts = generateSystemFacts(teachers, rooms, sections, courses, assignments);
+        const facts = generateSystemFacts(teachers, rooms, sections, courses, assignments, teacherBlockSet, roomBlockSet);
         
         console.log('Executing primary solver...');
-        const engineResponse = await executePrologSolver(facts);
+        let engineResponse = await executePrologSolver(facts);
         if (!engineResponse || !engineResponse.drafts) throw new Error('Solver failed to return valid JSON.');
+        let solverMode = "STRICT";
+
+        if (engineResponse.solverState === 'timeout_recovery' || engineResponse.solverState === 'infeasible') {
+            console.log('Primary solver boundaries breached. Initiating Layer-2 Relaxed Solve...');
+            const relaxedFacts = facts + '\nrelax_fatigue.\nrelax_lunch.\n';
+            const relaxedResponse = await executePrologSolver(relaxedFacts);
+            if (relaxedResponse && relaxedResponse.drafts && relaxedResponse.drafts.length > 0) {
+                 engineResponse = relaxedResponse;
+                 if (engineResponse.solverState === 'infeasible' || engineResponse.solverState === 'timeout_recovery') {
+                     solverMode = "FAILED";
+                 } else {
+                     solverMode = "RELAXED_FATIGUE";
+                 }
+            } else {
+                 solverMode = "FAILED";
+            }
+        }
+
+        const teacherBlockDensity = teachers.length > 0 ? (teacherBlockSet.size / (teachers.length * maxRoomSlots)) : 0;
+        const roomBlockDensity = rooms.length > 0 ? (roomBlockSet.size / (rooms.length * maxRoomSlots)) : 0;
+        const constraintSaturation = totalSlots > 0 ? ((teacherBlockSet.size + roomBlockSet.size) / (totalSlots * 2)) : 0;
+
+        // Slot spread score: measure how evenly blocks are distributed across (day, slot) pairs.
+        // A score near 1 = evenly spread (solvable); near 0 = clustered (risky even at low saturation).
+        const slotBuckets = new Map();
+        [...teacherBlockSet, ...roomBlockSet].forEach(key => {
+            const parts = key.split('-');
+            const bucket = `${parts[1]}-${parts[2]}`; // day-slot
+            slotBuckets.set(bucket, (slotBuckets.get(bucket) || 0) + 1);
+        });
+        const totalBlocks = teacherBlockSet.size + roomBlockSet.size;
+        const maxBucketSize = slotBuckets.size > 0 ? Math.max(...slotBuckets.values()) : 1;
+        const slotSpreadScore = totalBlocks > 0 ? parseFloat((1 - (maxBucketSize / totalBlocks)).toFixed(3)) : 1.0;
 
         const solverStartTime = Date.now();
         const cleanDrafts = engineResponse.drafts.map(draft => {
@@ -169,6 +291,7 @@ export const generateDrafts = async (req, res) => {
 
                 const mappedEntry = {
                     sectionId: entry.sectionId.replace('id_', ''), sectionName: section?.name || 'Unknown',
+                    programId, yearId,
                     courseId: cid, courseName: course?.name || 'Unknown',
                     teacherId: entry.teacherId === 'none' ? null : entry.teacherId.replace('id_', ''), teacherName: entry.teacherId === 'none' ? 'None' : (teacher?.name || 'Unknown'),
                     roomId: entry.roomId === 'none' ? null : entry.roomId.replace('id_', ''), roomName: entry.roomId === 'none' ? 'None' : (room?.name || 'Unknown'),
@@ -241,16 +364,21 @@ export const generateDrafts = async (req, res) => {
             const solverStateFallback = unscheduledCount === 0 ? "optimal" : (unscheduledCount === total ? "infeasible" : "partial");
             const solverState = engineResponse.solverState || solverStateFallback;
             const solverReliabilityMap = { optimal: 1.0, partial: 0.8, timeout_recovery: 0.6, infeasible: 0.2 };
-            const confidence = qualityScore * (solverReliabilityMap[solverState] || 0.5);
-            const trustScore = Math.max(0, Math.min(1, (qualityScore * 0.4) + (confidence * 0.3))); // Stable later
+            // Confidence: accounts for both scheduling ratio AND constraint pressure
+            const confidence = parseFloat((qualityScore * (1 - constraintSaturation) * (solverReliabilityMap[solverState] || 0.5)).toFixed(3));
+            const trustScore = Math.max(0, Math.min(1, (qualityScore * 0.4) + (confidence * 0.3))); // refined later by stability worker
 
             const hashSource = [...scheduled].sort((a, b) => (a.sectionId || "").localeCompare(b.sectionId || "") || (a.day || "").localeCompare(b.day || "") || (a.slot || 0) - (b.slot || 0))
                 .map(s => `${s.courseId}-${s.teacherId}-${s.roomId}-${s.day}-${s.slot}`).join('|');
             const solutionHash = crypto.createHash('md5').update(hashSource).digest('hex');
 
-            let maxFailures = 0, topBottleneck = "None";
-            Object.entries(failureSummary).forEach(([key, count]) => { if (count > maxFailures) { maxFailures = count; topBottleneck = key; } });
-            const bottleneckImpact = unscheduledCount > 0 ? parseFloat((maxFailures / unscheduledCount).toFixed(2)) : 0;
+            let maxScore = -1, topBottleneck = "None";
+            Object.entries(failureSummary).forEach(([key, count]) => { 
+                const currentDensity = (key === 'teacherContentions' || key === 'noTeachers') ? teacherBlockDensity : ((key === 'roomContentions' || key === 'noRooms') ? roomBlockDensity : 0);
+                const currentScore = (count * 2) + (currentDensity * 5);
+                if (currentScore > maxScore) { maxScore = currentScore; topBottleneck = key; } 
+            });
+            const bottleneckImpact = unscheduledCount > 0 ? parseFloat((maxScore / (unscheduledCount * 2)).toFixed(2)) : 0;
 
             const severityMap = { "low": 1, "medium": 2, "high": 3 };
             const affectedCourseTracker = {};
@@ -302,6 +430,15 @@ export const generateDrafts = async (req, res) => {
                 }
             }
 
+            let sysReason = unscheduledCount > 0 ? `${topBottleneck} (${(bottleneckImpact * 100).toFixed(0)}% mapped constraint)` : 'Nominal execution';
+            // High saturation warning; also checks spread — clustered blocks are worse than spread ones
+            if (constraintSaturation > 0.85 || (constraintSaturation > 0.6 && slotSpreadScore < 0.3)) {
+                sysStatus = "strained";
+                sysReason = slotSpreadScore < 0.3
+                    ? `High constraint clustering (spread: ${slotSpreadScore}) — unsolvable slots likely`
+                    : "High constraint density — results may degrade";
+            }
+
             const solverTimeMs = Date.now() - solverStartTime;
 
             return {
@@ -309,26 +446,45 @@ export const generateDrafts = async (req, res) => {
                 solverState: solverState, scheduled, unscheduled,
                 summary: { total, scheduled: scheduledCount, unscheduled: unscheduledCount, qualityScore, weightedScore, penaltyScore, confidence, trustScore },
                 analytics: {
+                    solverMode, constraintSaturation, slotSpreadScore, teacherBlockDensity, roomBlockDensity,
                     failureSummary, topBottleneck, bottleneckImpact,
                     bottleneckContext: { affectedSections: Array.from(affectedSectionSet), topAffectedCourses },
                     stabilityScore: 0,
                     riskStats: { truePositive: tp, falsePositive: fp, falseNegative: fn, precision, recall }
                 },
-                systemHealth: { status: sysStatus, reason: maxFailures > 0 ? `${topBottleneck} (${(bottleneckImpact * 100).toFixed(0)}%)` : 'Nominal execution' },
-                meta: { runId: currentRunId, solutionHash, solverTimeMs, asyncTimeMs: 0, iterationsCount: 1, stabilityPending: true, lastUpdatedAt: Date.now() },
+                systemHealth: { status: sysStatus, reason: sysReason },
+                meta: { runId: currentRunId, generationId: generationId, solutionHash, solverTimeMs, asyncTimeMs: 0, iterationsCount: 1, stabilityPending: true, lastUpdatedAt: Date.now() },
                 auditLog: [{ runId: currentRunId, qualityScore, stabilityScore: 0, trustScore, timestamp: Date.now() }],
                 timetable: scheduled 
             };
         });
 
         const draftDoc = await models.DraftTimetable.create({ drafts: cleanDrafts, createdBy: req.user._id });
-        res.json({ draftId: draftDoc._id }); 
+
+        // Structured production log — critical for debugging generation issues
+        const primaryDraft = cleanDrafts[0];
+        console.info(JSON.stringify({
+            event: 'GENERATION_COMPLETE',
+            programId, yearId,
+            generationId: generationId.toString(),
+            solverMode,
+            scheduledCount: primaryDraft.summary.scheduled,
+            unscheduledCount: primaryDraft.summary.unscheduled,
+            qualityScore: primaryDraft.summary.qualityScore,
+            confidence: primaryDraft.summary.confidence,
+            constraintSaturation: parseFloat(constraintSaturation.toFixed(3)),
+            slotSpreadScore,
+            topBottleneck,
+            systemHealthStatus: primaryDraft.systemHealth.status,
+            solverTimeMs: primaryDraft.meta.solverTimeMs,
+        }));
+
+        res.json({ draftId: draftDoc._id });
         
         workerQueue.push(async () => {
             const asyncStart = Date.now();
             try {
-                const ogDraft = cleanDrafts[0]; // Currently supporting single branch master returns
-                const targetDraftId = ogDraft._id || null; 
+                const ogDraft = cleanDrafts[0]; 
                 const ogHashArr = ogDraft.scheduled.map(s => `${s.courseId}-${s.teacherId}-${s.roomId}-${s.day}-${s.slot}`);
                 let overlapCount = 0;
                 
@@ -337,7 +493,7 @@ export const generateDrafts = async (req, res) => {
                         return ((a.theoryTeacherIds?.length || 0) + (a.labTeacherIds?.length || 0)) - ((b.theoryTeacherIds?.length || 0) + (b.labTeacherIds?.length || 0));
                     });
                     
-                    const runResp = await executePrologSolver(generateSystemFacts(teachers, rooms, sections, courses, shuffledAssigns));
+                    const runResp = await executePrologSolver(generateSystemFacts(teachers, rooms, sections, courses, shuffledAssigns, teacherBlockSet, roomBlockSet));
                     if (runResp && runResp.drafts && runResp.drafts.length > 0) {
                         const newHashArr = runResp.drafts[0].timetable.filter(t => (t.status ?? 1) === 1).map(s => {
                             const cidParts = s.courseId.split('_');
@@ -351,7 +507,6 @@ export const generateDrafts = async (req, res) => {
                 const avgStability = totalPossible > 0 ? (overlapCount / totalPossible) : 1;
                 const asyncTimeMs = Date.now() - asyncStart;
 
-                // Enterprise Atomic Pattern & Mutex Matrix
                 const trustScoreFinal = Math.max(0, Math.min(1, (ogDraft.summary.qualityScore * 0.4) + (ogDraft.summary.confidence * 0.3) + (avgStability * 0.3)));
                 
                 await models.DraftTimetable.updateOne(
@@ -379,8 +534,6 @@ export const generateDrafts = async (req, res) => {
                         }
                     }
                 );
-                
-                console.log(`[SYS-DIAGNOSTIC] ${ogDraft.meta.runId} | Quality: ${ogDraft.summary.qualityScore} | Trust: ${trustScoreFinal.toFixed(2)} | Stable: ${avgStability.toFixed(2)}`);
             } catch (bgErr) {
                 console.error("Background worker failed:", bgErr);
             }
@@ -417,19 +570,48 @@ export const getDraft = async (req, res) => {
 export const publishDraft = async (req, res) => {
     try {
         const { draftId, optionIndex } = req.params;
-        const draftDoc = await models.DraftTimetable.findById(draftId);
-        if (!draftDoc) return res.status(404).json({ error: 'Draft not found' });
-        
-        const chosen = draftDoc.drafts[parseInt(optionIndex, 10)];
-        await models.Timetable.deleteMany({});
-        await models.Timetable.insertMany(chosen.timetable.map(t => ({
-            sectionId: t.sectionId, courseId: t.courseId,
-            teacherId: t.teacherId, roomId: t.roomId,
-            day: t.day, slot: t.slot, component: t.component
-        })));
+        const generation = await models.Generation.findOneAndUpdate(
+            { status: 'ACTIVE' },
+            { status: 'LOCKED' },
+            { new: true }
+        );
+        if (!generation) return res.status(400).json({ error: 'No ACTIVE generation cycle found or Generation already locked.' });
 
-        await models.DraftTimetable.findByIdAndDelete(draftId);
+        const draftDoc = await models.DraftTimetable.findById(draftId);
+        if (!draftDoc) {
+             await models.Generation.updateOne({ _id: generation._id }, { $set: { status: 'ACTIVE' } });
+             return res.status(404).json({ error: 'Draft not found' });
+        }
+
+        try {
+            const chosen = draftDoc.drafts[parseInt(optionIndex, 10)];
+            const sampleEntry = chosen.timetable[0];
+            if (sampleEntry && sampleEntry.programId && sampleEntry.yearId) {
+                 await models.Timetable.deleteMany({ programId: sampleEntry.programId, yearId: sampleEntry.yearId, generationId: generation._id });
+            }
+
+            await models.Timetable.insertMany(chosen.timetable.map(t => ({
+                sectionId: t.sectionId, programId: t.programId, yearId: t.yearId, courseId: t.courseId,
+                teacherId: t.teacherId, roomId: t.roomId, generationId: generation._id,
+                day: t.day, slot: t.slot, component: t.component
+            })));
+
+            await models.DraftTimetable.findByIdAndDelete(draftId);
+        } finally {
+            await models.Generation.updateOne({ _id: generation._id }, { $set: { status: 'ACTIVE' } });
+        }
         res.json({ message: 'Published successfully' });
+    } catch (err) {
+        if (err.message.includes('No ACTIVE')) res.status(400);
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const getActiveGeneration = async (req, res) => {
+    try {
+        const generation = await models.Generation.findOne({ status: 'ACTIVE' });
+        if (!generation) return res.status(404).json({ error: 'No active generation found.' });
+        res.json(generation);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

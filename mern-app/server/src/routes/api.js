@@ -1,6 +1,6 @@
 import express from 'express';
 import { getAll, getById, create, update, remove, getStats } from '../controllers/entityController.js';
-import { generateDrafts, getDraft, publishDraft } from '../controllers/generatorController.js';
+import { generateDrafts, getDraft, publishDraft, getActiveGeneration } from '../controllers/generatorController.js';
 import { login } from '../controllers/authController.js';
 import { createUser, listUsers } from '../controllers/userController.js';
 import { protect, requireAdmin } from '../middleware/authMiddleware.js';
@@ -13,6 +13,9 @@ router.post('/login', login);
 // Admin User Management Routes
 router.post('/users', protect, requireAdmin, createUser);
 router.get('/users', protect, requireAdmin, listUsers);
+
+// Generation Lifecycle
+router.get('/generation/active', protect, requireAdmin, getActiveGeneration);
 
 // Draft Generation Endpoints
 router.post('/generate-drafts', protect, requireAdmin, generateDrafts);
