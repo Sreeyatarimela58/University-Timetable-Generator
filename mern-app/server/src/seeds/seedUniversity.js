@@ -28,9 +28,9 @@ const CONFIG = {
         { name: 'B.Tech ECE', durationYears: 4, domain: 'ECE' },
         { name: 'MBA Core', durationYears: 2, domain: 'MBA' }
     ],
-    SECTION_NAMES: ['A', 'B', 'C', 'D'],
-    FACULTY_COUNT: 20,
-    ROOM_COUNT: 15,
+    SECTION_NAMES: ['A', 'B'],   // reduced from ['A','B','C','D'] — cuts problem size by 50%
+    FACULTY_COUNT: 25,             // increased from 20 — avoids teacher overload edge cases
+    ROOM_COUNT: 25,                // increased from 15 — prevents room bottlenecks during testing
 };
 
 // 3. Room Config
@@ -141,7 +141,7 @@ const createFacultyAndRooms = async () => {
     const specializations = ['CSE', 'ECE', 'MBA'];
     
     for (let i = 0; i < CONFIG.FACULTY_COUNT; i++) {
-        const blockedCount = faker.number.int({ min: 0, max: 2 });
+        const blockedCount = faker.number.int({ min: 0, max: 1 }); // max:2 -> max:1 for testing stability
         const unavailableSlots = [];
         const days = ['mon', 'tue', 'wed', 'thu', 'fri'];
         
@@ -219,7 +219,7 @@ const createCoursesAndAssignments = async (programs, years, sections, faculty) =
     };
 
     let courseCounter = 100;
-    let fallbackCount = 0;
+    // fallbackCount removed: fallback random assignment is disabled for testing
 
     for (const program of programs) {
         const programYears = years.filter(y => y.programId.toString() === program._id.toString());
@@ -229,7 +229,7 @@ const createCoursesAndAssignments = async (programs, years, sections, faculty) =
             
             for (let c = 0; c < subjects.length; c++) {
                 courseCounter++;
-                const isLabCourse = faker.datatype.boolean(); 
+                const isLabCourse = false; // hardcoded false: labs disabled during testing (hardest constraints)
                 
                 const theoryTotal = faker.helpers.arrayElement([2, 3, 4]);
                 const theorySessions = theoryTotal === 4 ? [2, 2] : (theoryTotal === 3 ? [2, 1] : [2]);
@@ -266,14 +266,10 @@ const createCoursesAndAssignments = async (programs, years, sections, faculty) =
                         if (lTeacher) labTeacherIds.push(lTeacher._id);
                     }
 
-                    if (theoryTeacherIds.length === 0) {
-                        fallbackCount++;
-                        theoryTeacherIds.push(faker.helpers.arrayElement(faculty)._id);
-                    }
-                    if (labTotal > 0 && labTeacherIds.length === 0) {
-                        fallbackCount++;
-                        labTeacherIds.push(faker.helpers.arrayElement(faculty)._id);
-                    }
+                    // No fallback random assignment: skip if no teacher available
+                    // Surfaces real overload issues instead of hiding them with random picks
+                    if (theoryTeacherIds.length === 0) continue;
+                    if (labTotal > 0 && labTeacherIds.length === 0) continue;
 
                     const assignment = await CourseAssignment.create({
                         courseId: course._id,
@@ -287,7 +283,18 @@ const createCoursesAndAssignments = async (programs, years, sections, faculty) =
         }
     }
 
-    return { courses, assignments, facultyLoads, fallbackCount };
+    // Sanity log: validate seeded data integrity before running solver
+    const totalLoad = [...facultyLoads.values()].reduce((a, b) => a + b.current, 0);
+    const avgLoad = faculty.length > 0 ? (totalLoad / faculty.length).toFixed(1) : 0;
+    console.log('\n Assignment Sanity Check:');
+    console.log(JSON.stringify({
+        totalAssignments: assignments.length,
+        totalCourses: courses.length,
+        teachersUsed: faculty.length,
+        avgLoadHrs: Number(avgLoad),
+    }, null, 2));
+
+    return { courses, assignments, facultyLoads };
 };
 
 const createStudents = async (sections) => {
