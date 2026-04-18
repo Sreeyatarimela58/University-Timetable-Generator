@@ -70,22 +70,24 @@ export const PreviewGrid = ({ timetable = [], title = 'Draft Preview' }) => {
                 </div>
             )}
 
-            <div className="tt-days-row">
-                <div className="tt-day" style={{padding: '0'}}></div>
-                {DAY_LABELS.map(d => (
-                    <div key={d} className="tt-day">{d}</div>
-                ))}
-            </div>
-
             <div className="tt-body">
-                {SLOTS.map((slot, idx) => (
-                    <div key={slot} className="tt-row">
-                        <div className="tt-time">
-                            {TIME_LABELS[idx]}
-                        </div>
-                        {DAYS.map(day => renderCell(day, slot))}
-                    </div>
-                ))}
+                <div className="tt-master-grid">
+                    {/* Header Row */}
+                    <div className="tt-day-header"></div>
+                    {DAY_LABELS.map(d => (
+                        <div key={d} className="tt-day-header">{d}</div>
+                    ))}
+
+                    {/* Body Rows */}
+                    {SLOTS.map((slot, idx) => (
+                        <React.Fragment key={slot}>
+                            <div className="tt-time-slot">
+                                {TIME_LABELS[idx]}
+                            </div>
+                            {DAYS.map(day => renderCell(day, slot))}
+                        </React.Fragment>
+                    ))}
+                </div>
             </div>
         </div>
     );

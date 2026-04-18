@@ -132,6 +132,11 @@ export const SolverTab = () => {
     const [activeGeneration, setActiveGeneration] = useState(null);
     const [pendingDraftState, setPendingDraftState] = useState(null);
 
+    // Filter years to only those belonging to the selected program
+    const filteredYears = targetProgram
+        ? years.filter(y => y.programId === targetProgram || y.programId?._id === targetProgram)
+        : [];
+
     useEffect(() => {
         const fetchFilters = async () => {
             try {
@@ -146,7 +151,7 @@ export const SolverTab = () => {
                 setActiveGeneration(genRes.data);
                 setPendingDraftState(pendingRes.data);
                 if (progRes.data.length > 0) setTargetProgram(progRes.data[0]._id);
-                if (yearRes.data.length > 0) setTargetYear(yearRes.data[0]._id);
+                // Don't auto-set year — let user pick after program is selected
             } catch (err) {
                 console.error("Failed to fetch context scopes:", err);
             }
@@ -298,36 +303,70 @@ export const SolverTab = () => {
                 )}
             </div>
 
-            {/* HEADER - Only visible when waiting */}
-            {(!drafts.length && !generating) && (
-                <header className="st-header">
-                    <div>
-                        <div className="st-brand-row">
-                            <h1 className="st-title">Timetable Intelligence</h1>
-                            <div className={`st-status-pill ${activeGeneration ? 'st-status-active' : 'st-status-error'}`}>
-                                <span className={`st-pulse-dot ${activeGeneration ? 'primary' : 'error'}`}></span>
-                                {activeGeneration ? activeGeneration.name : 'Unconfigured'}
-                            </div>
+            {/* HEADER - Now Persistent */}
+            <header className="st-header">
+                <div>
+                    <div className="st-brand-row">
+                        <h1 className="st-title">Timetable Intelligence</h1>
+                        <div className={`st-status-pill ${activeGeneration ? 'st-status-active' : 'st-status-error'}`}>
+                            <span className={`st-pulse-dot ${activeGeneration ? 'primary' : 'error'}`}></span>
+                            {activeGeneration ? activeGeneration.name : 'Unconfigured'}
                         </div>
-                        <p className="st-desc">
-                            {pendingDraftState?.hasPending 
-                                ? "Warning: Uncleared draft configurations exist in the registry."
-                                : "System parameters initialized. Adjust scopes and initiate algorithmic generation."}
-                        </p>
                     </div>
+                    <p className="st-desc">
+                        {pendingDraftState?.hasPending 
+                            ? "Warning: Uncleared draft configurations exist in the registry."
+                            : drafts.length > 0 
+                                ? "Algorithm execution complete. Review metrics and alternatives below."
+                                : "System parameters initialized. Adjust scopes and initiate algorithmic generation."}
+                    </p>
+                </div>
 
-                    <div className="st-controls">
-                        <select className="st-select" value={targetProgram} onChange={e => setTargetProgram(e.target.value)}>
+                <div className="st-controls">
+                    <div className="st-select-wrapper">
+                        <select className="st-select" value={targetProgram} onChange={e => {
+                            setTargetProgram(e.target.value);
+                            setTargetYear(''); // reset year when program changes
+                        }}>
                             <option value="" disabled>Select Program</option>
                             {programs.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
                         </select>
-                        <select className="st-select" value={targetYear} onChange={e => setTargetYear(e.target.value)}>
-                            <option value="" disabled>Select Year</option>
-                            {years.map(y => <option key={y._id} value={y._id}>{y.yearNumber} Year</option>)}
-                        </select>
+                        <span className="st-select-arrow">▾</span>
                     </div>
-                </header>
-            )}
+                    <div className="st-select-wrapper">
+                        <select className="st-select" value={targetYear} onChange={e => setTargetYear(e.target.value)} disabled={!targetProgram}>
+                            <option value="" disabled>Select Year</option>
+                            {filteredYears.map(y => <option key={y._id} value={y._id}>{y.yearNumber} Year</option>)}
+                        </select>
+                        <span className="st-select-arrow">▾</span>
+                    </div>
+
+                    <button 
+                        onClick={handleGenerate} 
+                        disabled={generating || !targetProgram || !targetYear}
+                        className="st-btn st-btn-primary"
+                        style={{ padding: '8px 16px', fontSize: '12px' }}
+                    >
+                        {generating ? (
+                            <>
+                                <span className="material-symbols-outlined" style={{ animation: 'spin 1s linear infinite' }}>sync</span>
+                                Initializing...
+                            </>
+                        ) : (
+                            <>
+                                <span className="material-symbols-outlined">auto_fix_high</span>
+                                {drafts.length > 0 ? 'Regenerate' : 'Generate'}
+                            </>
+                        )}
+                    </button>
+                    
+                    {drafts.length > 0 && (
+                        <button onClick={handleClearPending} className="st-btn st-btn-error" style={{ padding: '8px', minWidth: '40px' }} title="Clear Results">
+                            <span className="material-symbols-outlined" style={{ margin: 0 }}>delete</span>
+                        </button>
+                    )}
+                </div>
+            </header>
 
             {/* VIEW 1: Awaiting Generation */}
             {isUnconfigured && (
@@ -362,8 +401,8 @@ export const SolverTab = () => {
                     <div className="st-center-box">
                         <div className="st-icon-wrapper">
                             <div className="st-icon-blur error"></div>
-                            <div className="st-icon-container">
-                                <span className="material-symbols-outlined style-error">warning</span>
+                            <div className="st-icon-container error">
+                                <span className="material-symbols-outlined">warning</span>
                             </div>
                         </div>
                         <h2 className="st-center-title">Pending Drafts Found</h2>
@@ -422,16 +461,6 @@ export const SolverTab = () => {
             {/* VIEW 3: Result Viewer */}
             {isResult && (
                 <div className="st-viewer-layout">
-                    <div className="st-viewer-header">
-                        <div className="st-brand-row">
-                            <h1 className="st-title" style={{fontSize: '2rem'}}>Draft Active</h1>
-                            <div className="st-active-pill">
-                                <span className="st-pulse-dot primary"></span> Active Result
-                            </div>
-                        </div>
-                        <p className="st-viewer-subtitle">Stitch Decision Support Framework Version 4.2.1-Alpha</p>
-                    </div>
-
                     <div className="st-content">
                         <div className="st-main-canvas">
                             <PreviewGrid timetable={selectedDraft.timetable} title="Timetable Layout" />
@@ -447,7 +476,16 @@ export const SolverTab = () => {
                             </div>
                             <div className="st-tray-track">
                                 {drafts.map((draft, i) => (
-                                    <OptionCard key={i} draft={draft} index={i} isSelected={i === selectedIndex} onSelect={setSelectedDraft} />
+                                    <OptionCard 
+                                        key={i} 
+                                        draft={draft} 
+                                        index={i} 
+                                        isSelected={i === selectedIndex} 
+                                        onSelect={(d, idx) => {
+                                            setSelectedDraft(d);
+                                            setSelectedIndex(idx);
+                                        }} 
+                                    />
                                 ))}
                             </div>
                         </div>
