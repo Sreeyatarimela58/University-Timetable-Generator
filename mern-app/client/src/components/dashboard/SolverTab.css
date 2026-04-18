@@ -719,11 +719,42 @@
   border-bottom: 1px solid rgba(193,198,215,0.2);
 }
 .tt-title {
-  font-size: 12px;
+  margin: 0;
+}
+
+.tt-tabs {
+  display: flex;
+  gap: 0;
+  border: 1px solid rgba(193,198,215,0.3);
+  width: fit-content;
+}
+
+.tt-tab {
+  padding: 6px 16px;
+  font-size: 10px;
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  margin: 0;
+  border: none;
+  border-right: 1px solid rgba(193,198,215,0.3);
+  background: #ffffff;
+  color: var(--st-secondary);
+  cursor: pointer;
+  transition: none;
+  border-radius: 0;
+}
+
+.tt-tab:last-child {
+  border-right: none;
+}
+
+.tt-tab.active {
+  background-color: var(--st-on-surface);
+  color: #ffffff;
+}
+
+.tt-tab:hover:not(.active) {
+  background-color: var(--st-surface-container-high);
 }
 .tt-legend {
   display: flex;

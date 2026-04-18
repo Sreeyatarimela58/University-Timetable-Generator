@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri'];
 const DAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
@@ -10,7 +10,7 @@ const COMPONENT_COLORS = {
     lab:    'lab'
 };
 
-export const PreviewGrid = ({ timetable = [], title = 'Draft Preview' }) => {
+const SectionGrid = ({ timetable = [] }) => {
     const findEntry = (day, slot) => timetable.find(e => e.day === day && e.slot === slot);
 
     const renderCell = (day, slot) => {
@@ -53,41 +53,99 @@ export const PreviewGrid = ({ timetable = [], title = 'Draft Preview' }) => {
     };
 
     return (
-        <div className="tt-wrapper">
-            {title && (
+        <div className="tt-master-grid">
+            {/* Header Row */}
+            <div className="tt-day-header"></div>
+            {DAY_LABELS.map(d => (
+                <div key={d} className="tt-day-header">{d}</div>
+            ))}
+
+            {/* Body Rows */}
+            {SLOTS.map((slot, idx) => (
+                <React.Fragment key={slot}>
+                    <div className="tt-time-slot">
+                        {TIME_LABELS[idx]}
+                    </div>
+                    {DAYS.map(day => renderCell(day, slot))}
+                </React.Fragment>
+            ))}
+        </div>
+    );
+};
+
+export const PreviewGrid = ({ timetable = [], title = 'Draft Preview' }) => {
+    const [activeSectionId, setActiveSectionId] = useState(null);
+
+    const groupedBySection = useMemo(() => {
+        return timetable.reduce((acc, entry) => {
+            const key = entry.sectionId;
+            if (!acc[key]) {
+                acc[key] = {
+                    name: entry.sectionName || `Section ${key}`,
+                    data: []
+                };
+            }
+            acc[key].data.push(entry);
+            return acc;
+        }, {});
+    }, [timetable]);
+
+    const sectionIds = useMemo(() => {
+        return Object.keys(groupedBySection).sort();
+    }, [groupedBySection]);
+
+    useEffect(() => {
+        if (sectionIds.length && (!activeSectionId || !groupedBySection[activeSectionId])) {
+            setActiveSectionId(sectionIds[0]);
+        }
+    }, [sectionIds, activeSectionId, groupedBySection]);
+
+    if (!timetable.length) {
+        return (
+            <div className="tt-wrapper">
                 <div className="tt-header">
                     <h3 className="tt-title">{title}</h3>
-                    <div className="tt-legend">
-                        <div className="tt-leg-item">
-                            <div className="tt-dot theory"></div>
-                            <span className="tt-title" style={{fontSize: '9px'}}>Theory</span>
-                        </div>
-                        <div className="tt-leg-item">
-                            <div className="tt-dot lab"></div>
-                            <span className="tt-title" style={{fontSize: '9px'}}>Lab</span>
-                        </div>
+                </div>
+                <div className="tt-empty-state">No timetable data available.</div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="tt-wrapper">
+            <div className="tt-header">
+                <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
+                    <h3 className="tt-title">{title}</h3>
+                    <div className="tt-tabs">
+                        {sectionIds.map(sid => (
+                            <button
+                                key={sid}
+                                onClick={() => setActiveSectionId(sid)}
+                                className={`tt-tab ${activeSectionId === sid ? 'active' : ''}`}
+                            >
+                                {groupedBySection[sid].name}
+                            </button>
+                        ))}
                     </div>
                 </div>
-            )}
+                <div className="tt-legend">
+                    <div className="tt-leg-item">
+                        <div className="tt-dot theory"></div>
+                        <span className="tt-title" style={{fontSize: '9px'}}>Theory</span>
+                    </div>
+                    <div className="tt-leg-item">
+                        <div className="tt-dot lab"></div>
+                        <span className="tt-title" style={{fontSize: '9px'}}>Lab</span>
+                    </div>
+                </div>
+            </div>
 
             <div className="tt-body">
-                <div className="tt-master-grid">
-                    {/* Header Row */}
-                    <div className="tt-day-header"></div>
-                    {DAY_LABELS.map(d => (
-                        <div key={d} className="tt-day-header">{d}</div>
-                    ))}
-
-                    {/* Body Rows */}
-                    {SLOTS.map((slot, idx) => (
-                        <React.Fragment key={slot}>
-                            <div className="tt-time-slot">
-                                {TIME_LABELS[idx]}
-                            </div>
-                            {DAYS.map(day => renderCell(day, slot))}
-                        </React.Fragment>
-                    ))}
-                </div>
+                {activeSectionId && groupedBySection[activeSectionId] ? (
+                    <SectionGrid timetable={groupedBySection[activeSectionId].data} />
+                ) : (
+                    <div className="tt-empty-state">Select a section to view its timetable.</div>
+                )}
             </div>
         </div>
     );
