@@ -1,4 +1,37 @@
+@import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+@layer utilities {
+  .portal-bg {
+    background:
+      radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.06), transparent 40%),
+      radial-gradient(circle at 80% 80%, rgba(139, 92, 246, 0.06), transparent 40%);
+    background-color: #fbfbfd;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes zoomIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  .animate-in {
+    animation-duration: 500ms;
+    animation-fill-mode: both;
+  }
+
+  .fade-in {
+    animation-name: fadeIn;
+  }
+
+  .zoom-in-95 {
+    animation-name: zoomIn;
+  }
+}
 
 /* ─── Apple Design Tokens ─────────────────────────────────── */
 :root {
@@ -39,7 +72,7 @@ html, body {
   overflow-x: hidden;
 }
 
-#root { display: flex; min-height: 100vh; }
+#root { width: 100%; min-height: 100vh; }
 
 /* ─── App Shell ───────────────────────────────────────────── */
 .app-layout {
@@ -94,7 +127,7 @@ html, body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
   min-height: 0;
 }
 

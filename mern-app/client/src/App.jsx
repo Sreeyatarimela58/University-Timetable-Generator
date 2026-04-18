@@ -43,7 +43,7 @@ const AdminLayout = ({ children }) => {
             {!isFullWidth && <Sidebar />}
             <div className="app-main" style={isFullWidth ? { marginLeft: 0 } : {}}>
                 <TopHeader title={title} />
-                <div className="animate-in">
+                <div className="animate-in" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
                     {children}
                 </div>
             </div>
