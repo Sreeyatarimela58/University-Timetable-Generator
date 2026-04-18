@@ -16,7 +16,17 @@ const studentSchema = new mongoose.Schema({
     sectionId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Section',
-        default: null  // can be unassigned initially
+        default: null
+    },
+    programId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Program',
+        default: null
+    },
+    yearId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'AcademicYear',
+        default: null
     }
 }, { timestamps: true });
 

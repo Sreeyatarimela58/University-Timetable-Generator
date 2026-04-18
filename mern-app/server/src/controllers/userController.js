@@ -2,7 +2,7 @@ import { User } from '../models/User.js';
 import * as models from '../models/index.js';
 
 export const createUser = async (req, res) => {
-    const { username, password, role, name, sectionId } = req.body;
+    const { username, password, role, name, sectionId, programId, yearId, specialization } = req.body;
 
     if (!username || !password || !name) {
         return res.status(400).json({ error: "ID Number, Name, and Password are required fields" });
@@ -22,14 +22,17 @@ export const createUser = async (req, res) => {
             const student = await models.Student.create({
                 name,
                 rollNumber: username,
-                sectionId: sectionId || null
+                sectionId: sectionId || null,
+                programId: programId || null,
+                yearId: yearId || null
             });
             newProfileId = student._id;
         } 
         else if (role === 'prof') {
             const teacher = await models.Teacher.create({
                 name,
-                maxHoursPerWeek: req.body.maxHoursPerWeek ? Number(req.body.maxHoursPerWeek) : 20
+                maxHoursPerWeek: req.body.maxHoursPerWeek ? Number(req.body.maxHoursPerWeek) : 20,
+                specialization: specialization || null
             });
             newProfileId = teacher._id;
         } 
@@ -42,7 +45,8 @@ export const createUser = async (req, res) => {
             username, // This is the ID No
             password,
             role,
-            profileId: newProfileId
+            profileId: newProfileId,
+            profileModel: role === 'student' ? 'Student' : 'Teacher'
         });
 
         res.status(201).json({
@@ -59,9 +63,25 @@ export const createUser = async (req, res) => {
 
 export const listUsers = async (req, res) => {
     try {
-        const users = await User.find({ role: { $ne: 'admin' } }).select('-password');
+        const users = await User.find({ role: { $ne: 'admin' } })
+            .select('-password')
+            .populate({
+                path: 'profileId',
+                strictPopulate: false,
+                populate: [
+                    { 
+                        path: 'sectionId',
+                        strictPopulate: false,
+                        populate: [
+                            { path: 'yearId' },
+                            { path: 'programId' }
+                        ]
+                    }
+                ]
+            });
         res.json(users);
     } catch(err) {
+        console.error('List Users Error:', err);
         res.status(500).json({ error: 'Failed to fetch users' });
     }
 };

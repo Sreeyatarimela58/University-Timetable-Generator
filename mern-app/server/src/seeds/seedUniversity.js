@@ -328,7 +328,9 @@ const createStudents = async (sections) => {
                 name: faker.person.fullName(),
                 rollNumber: `STU-${studentCounter}`,
                 email: faker.internet.email(),
-                sectionId: section._id
+                sectionId: section._id,
+                programId: section.programId,
+                yearId: section.yearId
             });
         }
     }
@@ -358,7 +360,8 @@ const createUsers = async (facultyList, studentsList) => {
             username: cleanName,
             password: passwordHash,
             role: 'prof',
-            profileId: teacher._id
+            profileId: teacher._id,
+            profileModel: 'Teacher'
         });
     });
 
@@ -367,7 +370,8 @@ const createUsers = async (facultyList, studentsList) => {
             username: student.rollNumber,
             password: passwordHash,
             role: 'student',
-            profileId: student._id
+            profileId: student._id,
+            profileModel: 'Student'
         });
     });
 

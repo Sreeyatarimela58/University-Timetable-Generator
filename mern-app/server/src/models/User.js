@@ -21,7 +21,15 @@ const userSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         required: function() {
             return this.role !== 'admin';
-        }
+        },
+        refPath: 'profileModel'
+    },
+    profileModel: {
+        type: String,
+        required: function() {
+            return this.role !== 'admin';
+        },
+        enum: ['Student', 'Teacher']
     }
 }, { timestamps: true });
 
