@@ -6,6 +6,11 @@ const sectionSchema = new mongoose.Schema({
         ref: 'AcademicYear',
         required: true
     },
+    programId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Program',
+        required: true
+    },
     name: {
         type: String,
         required: true,
