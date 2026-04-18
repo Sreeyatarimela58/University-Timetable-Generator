@@ -47,8 +47,9 @@
 .st-layout {
   display: flex;
   flex-direction: column;
-  height: calc(100% + 64px); /* Cancel 32px top/bottom padding */
-  width: calc(100% + 80px);  /* Cancel 40px left/right padding */
+  flex: 1;
+  width: auto;
+  min-height: calc(100vh - 60px); 
   margin: -32px -40px; 
   padding: 24px;
   box-sizing: border-box;

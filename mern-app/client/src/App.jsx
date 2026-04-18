@@ -16,6 +16,7 @@ import { UsersTab }           from './components/dashboard/UsersTab';
 import { AssignmentsTab }    from './components/dashboard/AssignmentsTab';
 import { SolverTab }         from './components/dashboard/SolverTab';
 import { ArchivesTab }       from './components/dashboard/ArchivesTab';
+import { TopHeader }         from './components/TopHeader';
 
 // ─── Authenticated Admin Layout ──────────────────────────────
 const AdminLayout = ({ children }) => {
@@ -42,6 +43,7 @@ const AdminLayout = ({ children }) => {
         <div className="app-layout">
             {!isFullWidth && <Sidebar />}
             <div className="app-main" style={isFullWidth ? { marginLeft: 0 } : {}}>
+                {isFullWidth && <TopHeader title={title} />}
                 <div className="animate-in" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
                     {children}
                 </div>

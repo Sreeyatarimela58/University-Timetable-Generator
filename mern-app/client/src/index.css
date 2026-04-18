@@ -136,6 +136,85 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
   flex-shrink: 0;
 }
 
+.header-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--on-surface);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin: 0;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  background: var(--surface-container-high);
+  border: 1px solid var(--outline);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--secondary);
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.user-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--on-surface);
+  line-height: 1.2;
+}
+
+.user-role-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--secondary);
+  letter-spacing: 0.05em;
+}
+
+.header-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--outline);
+}
+
+.logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--error);
+  color: white;
+  border: none;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  border-radius: 0;
+}
+
+.logout-btn:hover {
+  opacity: 0.85;
+}
+
 .page-content {
   padding: 32px 40px;
   flex: 1;
@@ -452,7 +531,7 @@ input[type=number] {
 /* ─── Legacy class aliases (backward compat) ──────────────── */
 .glass-panel   { background: var(--surface); border: 1px solid var(--outline); border-radius: 16px; padding: 24px; box-shadow: var(--shadow-xs); margin-bottom: 0; }
 .entity-section { margin-bottom: 0; }
-.tab-content   { /* no-op */ }
+.tab-content   { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .hint-text     { font-size: 13px; color: var(--secondary); }
 .form-msg      { font-size: 13px; padding: 10px 14px; border-radius: 10px; background: var(--primary-bg); color: var(--primary); border: 1px solid rgba(0,102,204,0.12); }
 .form-grid     { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 20px; }
@@ -483,6 +562,8 @@ input[type=number] {
   max-width: 1040px;
   margin: 0 auto;
 }
+
+
 
 .portal-header {
   display: flex;
