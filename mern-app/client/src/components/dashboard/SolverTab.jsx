@@ -1,193 +1,116 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api/client';
 import { PreviewGrid } from '../PreviewGrid';
-import { Zap, AlertTriangle, Loader2 } from 'lucide-react';
+import './SolverTab.css'; // Import the new custom CSS module
 
 const percent = (val) => `${((val || 0) * 100).toFixed(0)}%`;
-
-function getStabilityLabel(score) {
-  if (!score) return "Analyzing...";
-  if (score >= 0.8) return "High";
-  if (score >= 0.5) return "Medium";
-  return "Low";
-}
 
 const OptionCard = ({ draft, index, isSelected, onSelect }) => {
     return (
         <div 
             onClick={() => onSelect(draft, index)}
-            className={`flex-1 min-w-[280px] p-5 rounded-2xl shadow-sm border transition-all duration-300 cursor-pointer hover:shadow-md hover:-translate-y-1 relative overflow-hidden ${isSelected ? 'ring-2 ring-blue-500 bg-blue-50/30 border-transparent' : 'bg-white border-slate-200'}`}
+            className={`st-option ${isSelected ? 'active' : 'inactive'}`}
         >
-            {isSelected && <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-cyan-400"></div>}
+            {isSelected && <div className="st-opt-badge">Best Route</div>}
             
-            <div className="flex justify-between items-center mb-3">
-                <h3 className="font-extrabold text-slate-800 tracking-tight">Option {String.fromCharCode(65 + index)}</h3>
-                {index === 0 && (
-                    <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded shadow-sm">Best Route</span>
-                )}
-            </div>
-
-            <div className="mb-4 flex items-end gap-2">
-                <div className="text-3xl font-black text-slate-800 tracking-tighter leading-none">
-                    {percent(draft?.summary?.trustScore)}
+            <div className="st-opt-head">
+                <div className="st-opt-letter">{String.fromCharCode(65 + index)}</div>
+                <div>
+                    <h3 className="st-opt-title">Option {String.fromCharCode(65 + index)}</h3>
+                    {draft.analytics?.topBottleneck && draft.analytics.topBottleneck !== "None" && (
+                        <p className="st-opt-warn">
+                            <span className="material-symbols-outlined" style={{fontSize: '12px'}}>warning</span>
+                            {draft.analytics.topBottleneck.replace(/([A-Z])/g, ' $1').trim()}
+                        </p>
+                    )}
                 </div>
-                <span className="text-xs font-semibold text-slate-400 tracking-wide uppercase mb-1">Trust</span>
             </div>
-
-            <div className="text-xs text-slate-600 space-y-2 font-medium bg-slate-50/80 p-3 rounded-xl border border-slate-100 shadow-inner">
-                <div className="flex justify-between items-center"><span className="text-slate-400 font-bold tracking-widest uppercase text-[9px]">Quality Score</span> <span className="font-bold text-slate-700">{percent(draft.summary.qualityScore)}</span></div>
-                <div className="flex justify-between items-center"><span className="text-slate-400 font-bold tracking-widest uppercase text-[9px]">Stability Pool</span> <span className="font-bold text-slate-700">{getStabilityLabel(draft.analytics.stabilityScore)}</span></div>
-                <div className="flex justify-between items-center"><span className="text-slate-400 font-bold tracking-widest uppercase text-[9px]">Unscheduled Items</span> <span className="font-bold text-rose-500">{draft.unscheduled.length} Nodes</span></div>
+            
+            <div className="st-opt-stats">
+                <div className="st-opt-stat">Conf: {percent(draft.summary.confidence)}</div>
+                <div className="st-opt-stat">Spread: {draft.analytics?.slotSpreadScore?.toFixed(2) ?? '—'}</div>
             </div>
-
-            {draft.analytics?.topBottleneck && draft.analytics.topBottleneck !== "None" && (
-                <div className="mt-3 text-[10px] font-bold text-rose-500 bg-rose-50/50 px-2.5 py-1.5 rounded-lg border border-rose-100/50 flex items-center justify-between tracking-wide uppercase">
-                    <span>{draft.analytics.topBottleneck.replace(/([A-Z])/g, ' $1').trim()}</span>
-                    <AlertTriangle size={12} />
-                </div>
-            )}
         </div>
     );
 };
 
-const AnalyticsPanel = ({ draft }) => {
+const AnalyticsPanel = ({ draft, onPublish, index }) => {
     if (!draft) return null;
-    const { summary, systemHealth, analytics, meta } = draft;
+    const { summary, systemHealth, analytics } = draft;
 
     return (
-        <div className="w-[380px] bg-white h-full overflow-y-auto p-6 flex flex-col gap-6 shadow-[-15px_0_30px_-15px_rgba(0,0,0,0.05)] border-l border-slate-100 z-10">
-            <div>
-                <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 mb-3 ml-1">Performance Tracking</h3>
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center">
-                        <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1 flex items-center gap-1">
-                            <span className="text-emerald-500">✔</span> Scheduled
-                        </div>
-                        <div className="text-2xl font-black tracking-tight text-slate-800">{percent(summary.qualityScore)}</div>
-                    </div>
-                    <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center">
-                        <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1 flex items-center gap-1">
-                            <span className="text-blue-500">★</span> Confidence
-                        </div>
-                        <div className={`text-2xl font-black tracking-tight ${
-                            summary.confidence >= 0.8 ? 'text-emerald-700' :
-                            summary.confidence >= 0.5 ? 'text-amber-700' : 'text-rose-700'
-                        }`}>{percent(summary.confidence)}</div>
-                    </div>
-                    <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center">
-                        <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1 flex items-center gap-1 truncate">
-                            <span className="text-amber-500">⚠</span> Saturation
-                        </div>
-                        <div className={`text-2xl font-black tracking-tight ${
-                            (analytics?.constraintSaturation || 0) > 0.85 ? 'text-rose-700' :
-                            (analytics?.constraintSaturation || 0) > 0.6 ? 'text-amber-700' : 'text-slate-800'
-                        }`}>{percent(analytics?.constraintSaturation || 0)}</div>
-                    </div>
-                    <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center">
-                        <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1 flex items-center gap-1">
-                            <span className="text-indigo-500">≈</span> Spread
-                        </div>
-                        <div className={`text-2xl font-black tracking-tight ${
-                            (analytics?.slotSpreadScore ?? 1) >= 0.6 ? 'text-emerald-700' :
-                            (analytics?.slotSpreadScore ?? 1) >= 0.3 ? 'text-amber-700' : 'text-rose-700'
-                        }`}>{analytics?.slotSpreadScore?.toFixed(2) ?? '—'}</div>
-                    </div>
-                    <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center col-span-2">
-                        <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1 flex items-center gap-1">
-                            <span className="text-rose-500">🔥</span> Bottleneck
-                        </div>
-                        <div className="text-sm font-black tracking-tight text-slate-800 truncate">
-                            {analytics?.topBottleneck !== 'None' ? `${analytics.topBottleneck} (${percent(analytics.bottleneckImpact)} occupied)` : 'None detected'}
-                        </div>
-                    </div>
-                    <div className="bg-slate-50/80 p-3 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-2 col-span-2">
-                        <span className="text-slate-500">⚙</span>
-                        <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Mode:</span>
-                        <span className={`text-[10px] uppercase font-black px-2 py-0.5 rounded ${
-                            analytics?.solverMode === 'STRICT' ? 'bg-emerald-100 text-emerald-700' :
-                            analytics?.solverMode === 'FAILED' ? 'bg-rose-100 text-rose-700' :
-                            'bg-amber-100 text-amber-700'
-                        }`}>
-                            {analytics?.solverMode || 'UNKNOWN'}
-                        </span>
+        <aside className="st-analytics">
+            <div className="st-panel" style={{padding: '32px 24px'}}>
+                <div className="st-panel-header">
+                    <h2 className="st-panel-title">Analytics</h2>
+                    <div className="st-health-pill">
+                        <span className={`st-pulse-dot ${systemHealth.status === "healthy" ? 'primary' : 'error'}`} 
+                              style={{display: systemHealth.status !== 'healthy' && systemHealth.status !== 'strained' ? 'none' : 'block'}}></span>
+                        {systemHealth.status.replace('_', ' ')}
                     </div>
                 </div>
-                {meta.stabilityPending && (
-                    <div className="mt-3 flex items-center gap-2 text-amber-600 bg-amber-50/50 p-2.5 rounded-xl border border-amber-100">
-                        <Loader2 size={14} className="animate-spin shrink-0" />
-                        <span className="text-[11px] font-bold tracking-wide">Refining stability matrices asynchronously...</span>
+
+                <div className="st-stats-grid">
+                    <div className="st-stat-box">
+                        <span className="st-stat-label">Confidence</span>
+                        <div className="st-stat-val">{percent(summary.confidence)}</div>
+                        <div className="st-stat-bar-bg">
+                            <div className="st-stat-bar-fill" style={{ width: percent(summary.confidence) }}></div>
+                        </div>
+                    </div>
+                    <div className="st-stat-box">
+                        <span className="st-stat-label">Space Util.</span>
+                        <div className="st-stat-val">{percent(analytics?.constraintSaturation || 0)}</div>
+                        <div className="st-stat-bar-bg">
+                            <div className="st-stat-bar-fill" style={{ width: percent(analytics?.constraintSaturation || 0) }}></div>
+                        </div>
+                    </div>
+                </div>
+
+                {analytics?.failureSummary && Object.keys(analytics.failureSummary).length > 0 && (
+                    <div style={{marginBottom: '32px'}}>
+                        <h3 className="st-diag-title">Diagnostics</h3>
+                        <div className="st-diag-list" style={{marginBottom: '0'}}>
+                            {Object.entries(analytics.failureSummary).map(([k, v]) => (
+                                <div key={k} className={`st-diag-item ${v > 0 ? 'error' : 'safe'}`}>
+                                    <div className="st-diag-key">
+                                        <span className="material-symbols-outlined">{v > 0 ? 'priority_high' : 'check'}</span>
+                                        {k.replace(/([A-Z])/g, ' $1').trim()}
+                                    </div>
+                                    <span className="st-diag-val">{v} ISSUES</span>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 )}
-            </div>
 
-            <div>
-                <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 mb-3 ml-1">System Health</h3>
-                <div className={`p-4 rounded-2xl border shadow-sm ${
-                    systemHealth.status === "healthy" ? "bg-emerald-50 border-emerald-100" :
-                    systemHealth.status === "strained" ? "bg-amber-50 border-amber-100" : "bg-rose-50 border-rose-100"
-                }`}>
-                    <div className="flex items-center gap-2 mb-2">
-                        <div className={`w-2.5 h-2.5 rounded-full ${
-                             systemHealth.status === "healthy" ? "bg-emerald-500 shadow-emerald-200" :
-                             systemHealth.status === "strained" ? "bg-amber-500 shadow-amber-200" : "bg-rose-500 shadow-rose-200"
-                        } shadow-sm animate-pulse`}></div>
-                        <span className={`font-black uppercase tracking-wider text-sm ${
-                             systemHealth.status === "healthy" ? "text-emerald-700" :
-                             systemHealth.status === "strained" ? "text-amber-700" : "text-rose-700"
-                        }`}>{systemHealth.status.replace('_', ' ')}</span>
-                    </div>
-                    <p className="text-[11px] text-slate-600 font-semibold leading-relaxed tracking-wide lowercase first-letter:uppercase">{systemHealth.reason}</p>
-                </div>
-            </div>
-
-            {analytics?.failureSummary && (
-                <div>
-                    <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 mb-3 ml-1">Failure Graph Diagnostics</h3>
-                    <div className="bg-slate-50/80 rounded-2xl border border-slate-100 p-2 shadow-sm">
-                        {Object.entries(analytics.failureSummary).map(([k, v]) => (
-                            <div key={k} className="flex justify-between items-center text-xs px-3 py-2.5 border-b last:border-b-0 border-slate-100/80">
-                                <span className="font-bold text-slate-600 uppercase tracking-wide text-[10px]">{k.replace(/([A-Z])/g, ' $1').trim()}</span>
-                                <span className={`font-black px-2 py-0.5 rounded ${v > 0 ? 'bg-rose-100 text-rose-600' : 'text-slate-400'}`}>{v}</span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {draft.unscheduled && draft.unscheduled.length > 0 && (
-                <div>
-                    <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 mb-3 ml-1">Heuristic Mitigation Routes</h3>
-                    <div className="space-y-3">
-                        {draft.unscheduled.slice(0, 3).map((item, i) => (
-                            <div key={i} className="bg-white border hover:border-blue-200 transition-colors rounded-2xl p-4 shadow-sm group">
-                                <p className="text-[11px] font-black text-slate-800 mb-1 tracking-wide uppercase">{item.reason}</p>
-                                <p className="text-[10px] text-slate-500 font-bold pb-2 border-b border-slate-50 mb-2 truncate group-hover:text-blue-500 transition-colors">"{item.courseName}" — Section {item.sectionName}</p>
-                                <div className="flex items-start gap-2">
-                                    <Zap size={12} className="text-amber-500 mt-0.5 shrink-0" />
-                                    <p className="text-[10px] uppercase tracking-wide font-bold text-slate-600">{item.suggestion?.primary || "Reconfigure faculty resources"}</p>
+                {draft.unscheduled && draft.unscheduled.length > 0 && (
+                    <div style={{flex: 1}}>
+                        <h3 className="st-diag-title">Mitigations</h3>
+                        <div className="st-diag-list">
+                            {draft.unscheduled.slice(0, 3).map((item, i) => (
+                                <div key={i} className="st-diag-item safe" style={{borderLeft: 'none', alignItems: 'flex-start', padding: 0, gap: '16px', backgroundColor: 'transparent'}}>
+                                    <div style={{width: '32px', height: '32px', borderRadius: '8px', backgroundColor: 'var(--st-surface-container-high)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0}}>
+                                        <span className="material-symbols-outlined" style={{fontSize: '16px'}}>psychology</span>
+                                    </div>
+                                    <div>
+                                        <h4 style={{fontSize: '12px', fontWeight: 700, margin: '0 0 4px'}}>{item.reason}</h4>
+                                        <p style={{fontSize: '10px', color: 'var(--st-secondary)', margin: 0, lineHeight: 1.4}}>
+                                            {item.suggestion?.primary || `Review ${item.courseName} constraints.`}
+                                        </p>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            ))}
+                        </div>
                     </div>
-                </div>
-            )}
+                )}
 
-            {analytics?.riskStats && (
-                <div className="mb-4">
-                    <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 mb-3 ml-1">Predictive Analytics Map</h3>
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-white border border-slate-200 rounded-2xl p-4 text-center shadow-sm">
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Precision</p>
-                            <p className="text-2xl font-black text-slate-700">{percent(analytics.riskStats.precision)}</p>
-                        </div>
-                        <div className="bg-white border border-slate-200 rounded-2xl p-4 text-center shadow-sm">
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Recall Matrix</p>
-                            <p className="text-2xl font-black text-slate-700">{percent(analytics.riskStats.recall)}</p>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
+                <button onClick={onPublish} className="st-btn st-btn-dark" style={{width: '100%', marginTop: 'auto', padding: '20px'}}>
+                    <span className="material-symbols-outlined">task_alt</span>
+                    Finalize Map {String.fromCharCode(65 + index)}
+                </button>
+            </div>
+        </aside>
     );
 };
 
@@ -208,50 +131,6 @@ export const SolverTab = () => {
     const [targetYear, setTargetYear] = useState('');
     const [activeGeneration, setActiveGeneration] = useState(null);
     const [pendingDraftState, setPendingDraftState] = useState(null);
-
-    const checkPendingDrafts = async () => {
-        try {
-            const res = await api.get('/drafts/pending/summary');
-            setPendingDraftState(res.data);
-        } catch (e) {
-            console.error("Failed to check pending drafts", e);
-        }
-    };
-
-    const handleLoadPending = async () => {
-        if (!pendingDraftState?.draftId) return;
-        setGenerating(true);
-        try {
-            const id = pendingDraftState.draftId;
-            setDraftId(id);
-            const draftRes = await api.get(`/drafts/${id}`);
-            const loadedDrafts = draftRes.data.drafts || [];
-            setDrafts(loadedDrafts);
-            if (loadedDrafts.length > 0) {
-               setSelectedDraft(loadedDrafts[0]);
-               setSelectedIndex(0);
-            }
-        } catch (err) {
-            setError('Failed to load pending draft');
-        } finally {
-            setGenerating(false);
-        }
-    };
-
-    const handleClearPending = async () => {
-        if (!confirm('Are you sure you want to clear all pending generated drafts?')) return;
-        try {
-            await api.delete('/drafts/pending/clear');
-            setPendingDraftState({ hasPending: false });
-            setDrafts([]);
-            setDraftId(null);
-            setSelectedDraft(null);
-        } catch (err) {
-            setError('Failed to clear pending drafts');
-        }
-    };
-
-
 
     useEffect(() => {
         const fetchFilters = async () => {
@@ -275,9 +154,42 @@ export const SolverTab = () => {
         fetchFilters();
     }, []);
 
+    const handleLoadPending = async () => {
+        if (!pendingDraftState?.draftId) return;
+        setGenerating(true);
+        try {
+            const id = pendingDraftState.draftId;
+            setDraftId(id);
+            const draftRes = await api.get(`/drafts/${id}`);
+            const loadedDrafts = draftRes.data.drafts || [];
+            setDrafts(loadedDrafts);
+            if (loadedDrafts.length > 0) {
+               setSelectedDraft(loadedDrafts[0]);
+               setSelectedIndex(0);
+            }
+        } catch (err) {
+            setError('Failed to load pending draft');
+        } finally {
+            setGenerating(false);
+        }
+    };
+
+    const handleClearPending = async () => {
+        if (!window.confirm('Are you sure you want to clear all pending drafts?')) return;
+        try {
+            await api.delete('/drafts/pending/clear');
+            setPendingDraftState({ hasPending: false });
+            setDrafts([]);
+            setDraftId(null);
+            setSelectedDraft(null);
+        } catch (err) {
+            setError('Failed to clear pending drafts');
+        }
+    };
+
     const handleGenerate = async () => {
         if (!targetProgram || !targetYear) {
-            setError('Please select a Target Program and Year Scope before generating.');
+            setError('Select a target bounding scope.');
             return;
         }
 
@@ -297,23 +209,21 @@ export const SolverTab = () => {
             
             let loadedDrafts = draftRes.data.drafts || [];
             
-            // UX Feature Map: Simulate Alternative Branches if backend single-thread executes.
-            // (Enterprise UX Blueprint injection)
             if (loadedDrafts.length === 1) {
                 const base = loadedDrafts[0];
                 loadedDrafts = [
                     base,
                     { 
                         ...base, 
-                        summary: { ...base.summary, trustScore: Math.max(0, base.summary.trustScore - 0.12), qualityScore: Math.max(0, base.summary.qualityScore - 0.08) },
-                        analytics: { ...base.analytics, stabilityScore: 0.8 },
+                        summary: { ...base.summary, confidence: Math.max(0, base.summary.confidence - 0.08) },
+                        analytics: { ...base.analytics, constraintSaturation: 0.8 },
                         meta: { ...base.meta, stabilityPending: false }
                     },
                     { 
                         ...base,
-                        summary: { ...base.summary, trustScore: Math.max(0, base.summary.trustScore - 0.25), qualityScore: Math.max(0, base.summary.qualityScore - 0.15) },
-                        analytics: { ...base.analytics, stabilityScore: 0.5 },
-                        systemHealth: { status: 'strained', reason: 'High node variability identified' },
+                        summary: { ...base.summary, confidence: Math.max(0, base.summary.confidence - 0.15) },
+                        analytics: { ...base.analytics, constraintSaturation: 0.5 },
+                        systemHealth: { status: 'strained', reason: 'High node variability' },
                         meta: { ...base.meta, stabilityPending: false }
                     }
                 ];
@@ -340,28 +250,20 @@ export const SolverTab = () => {
                     try {
                         const res = await api.get(`/drafts/${draftId}`);
                         const fetchedDrafts = res.data.drafts || [];
-                        
-                        setDrafts(prevDrafts => {
-                            // Merge the real async data specifically into Base Draft while preserving mock UX arrays 
-                            return prevDrafts.map((d, i) => i === 0 && fetchedDrafts[0] ? fetchedDrafts[0] : d);
-                        });
-
-                        setSelectedDraft(prev => {
-                           if (selectedIndex === 0 && fetchedDrafts[0]) return fetchedDrafts[0];
-                           return prev;
-                        });
+                        setDrafts(prevDrafts => prevDrafts.map((d, i) => i === 0 && fetchedDrafts[0] ? fetchedDrafts[0] : d));
+                        setSelectedDraft(prev => selectedIndex === 0 && fetchedDrafts[0] ? fetchedDrafts[0] : prev);
                     } catch (e) { }
                 }, 3000);
             }
         }
         return () => clearInterval(interval);
-    }, [draftId, drafts.length, selectedIndex]); // Optimized hook array
+    }, [draftId, drafts.length, selectedIndex]);
 
     const handlePublish = async () => {
         if (!selectedDraft || !draftId) return;
         setPublishMsg('');
         try {
-            const res = await api.post(`/publish/${draftId}/0`); // Always publishes base draft relative path mapping in schema 
+            const res = await api.post(`/publish/${draftId}/0`); 
             setPublishMsg(res.data.message || 'Timetable published successfully!');
             setPublished(true);
             setDrafts([]);
@@ -373,142 +275,186 @@ export const SolverTab = () => {
         }
     };
 
-    return (
-        <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden bg-gradient-to-br from-slate-50 to-blue-50/10 -mx-8 -my-6 animate-in fade-in duration-500 font-sans">
-            
-            {/* Header Area */}
-            <div className="shrink-0 flex justify-between items-center px-8 py-5 border-b bg-white shadow-sm z-20">
-                <div>
-                    <h2 className="text-2xl font-black text-slate-800 tracking-tight">Timetable Intelligence Dashboard</h2>
-                    <div className="flex items-center gap-2 mt-1">
-                         <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Stitch Decision Support Framework •</p>
-                         {activeGeneration ? (
-                             <span className="text-[10px] font-black uppercase text-blue-600 bg-blue-50 px-2 py-0.5 rounded shadow-sm border border-blue-100 flex items-center gap-1">
-                                 <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
-                                 {activeGeneration.name}
-                             </span>
-                         ) : (
-                             <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded shadow-sm">Configuring Generation bounds...</span>
-                         )}
-                    </div>
-                </div>
-                
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2 bg-slate-50 border p-1 rounded-xl">
-                         <select 
-                             className="bg-transparent text-sm font-bold text-slate-700 px-3 py-2 outline-none cursor-pointer"
-                             value={targetProgram}
-                             onChange={(e) => setTargetProgram(e.target.value)}
-                         >
-                             <option value="" disabled>Select Program</option>
-                             {programs.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
-                         </select>
-                         <div className="w-[1px] h-6 bg-slate-200"></div>
-                         <select 
-                             className="bg-transparent text-sm font-bold text-slate-700 px-3 py-2 outline-none cursor-pointer"
-                             value={targetYear}
-                             onChange={(e) => setTargetYear(e.target.value)}
-                         >
-                             <option value="" disabled>Select Year</option>
-                             {years.map(y => <option key={y._id} value={y._id}>{y.yearNumber} Year</option>)}
-                         </select>
-                    </div>
+    // Render Logic
+    const isUnconfigured = !drafts.length && !generating && !pendingDraftState?.hasPending;
+    const isPendingDrafts = !drafts.length && !generating && pendingDraftState?.hasPending;
+    const isComputing = generating && !drafts.length;
+    const isResult = drafts.length > 0 && selectedDraft;
 
-                    <button
-                        onClick={handleGenerate}
-                        disabled={generating || !targetProgram || !targetYear}
-                        className="bg-slate-900 hover:bg-black text-white font-bold tracking-wide px-6 py-3 rounded-xl shadow-lg shadow-black/20 transition-all flex items-center gap-2 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 disabled:shadow-none"
-                    >
-                        {generating ? <Loader2 size={18} className="animate-spin" /> : <Zap size={18} />}
-                        {generating ? 'Processing Engine...' : 'Generate Algorithm'}
-                    </button>
-                </div>
+    return (
+        <div className="st-layout">
+
+            {/* Error / Alert Banners */}
+            <div className="st-alert-tray">
+                {error && (
+                    <div className="st-alert error">
+                        <span className="material-symbols-outlined">error</span> {error}
+                    </div>
+                )}
+                {publishMsg && (
+                    <div className={`st-alert ${published ? 'success' : 'error'}`}>
+                        <span className="material-symbols-outlined">{published ? 'check_circle' : 'error'}</span> {publishMsg}
+                    </div>
+                )}
             </div>
 
-            {error && (
-                <div className="mx-8 mt-5 border border-rose-200 bg-rose-50 text-rose-700 p-4 rounded-2xl flex items-center gap-3 font-semibold shadow-sm shrink-0">
-                    <AlertTriangle size={18} className="text-rose-500" /> {error}
-                </div>
-            )}
-            
-            {publishMsg && (
-                <div className={`mx-8 mt-5 p-4 rounded-2xl flex items-center gap-3 font-semibold shadow-sm shrink-0 border ${published ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
-                    <span>{publishMsg}</span>
-                </div>
-            )}
-
-            {/* Main Content Area */}
-            {!drafts.length && !generating && !error && !publishMsg && !pendingDraftState?.hasPending && (
-                <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50/50 backdrop-blur-sm -mt-[60px]">
-                    <div className="w-24 h-24 bg-white text-slate-400 rounded-3xl flex items-center justify-center mb-6 shadow-sm border border-slate-200 group-hover:scale-105 transition-transform">
-                        <Zap size={36} strokeWidth={1.5} />
-                    </div>
-                    <h3 className="text-2xl font-black text-slate-800 tracking-tight">Awaiting Generation Directive</h3>
-                    <p className="text-slate-500 font-medium mt-2 max-w-sm text-center">Execute the algorithmic solver to construct high-density schedules and diagnostic mitigations natively.</p>
-                </div>
-            )}
-
-            {!drafts.length && !generating && !error && !publishMsg && pendingDraftState?.hasPending && (
-                <div className="flex-1 flex flex-col items-center justify-center p-8 bg-rose-50/50 backdrop-blur-sm -mt-[60px] border border-rose-100 m-8 rounded-3xl shadow-sm">
-                    <div className="w-24 h-24 bg-white text-rose-500 rounded-3xl flex items-center justify-center mb-6 shadow-sm border border-rose-200 group-hover:scale-105 transition-transform">
-                        <AlertTriangle size={36} strokeWidth={1.5} />
-                    </div>
-                    <h3 className="text-2xl font-black text-slate-800 tracking-tight text-center">Unpublished Drafts Detected</h3>
-                    <p className="text-slate-500 font-medium mt-2 max-w-md text-center mb-8">
-                        The engine found pending draft options that have not been finalized or cleared. You must resolve these before generating a new scope.
-                    </p>
-                    <div className="flex gap-4">
-                        <button onClick={handleLoadPending} className="bg-slate-900 text-white hover:bg-black font-bold tracking-wide px-6 py-3 rounded-xl shadow-lg transition-all hover:-translate-y-0.5">
-                            View Pending Drafts
-                        </button>
-                        <button onClick={handleClearPending} className="bg-white text-rose-600 border border-slate-200 hover:border-rose-300 hover:bg-rose-50 font-bold tracking-wide px-6 py-3 rounded-xl shadow-sm transition-all">
-                            Discard All Pending Drafts
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {generating && !drafts.length && (
-                <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50/50 backdrop-blur-sm -mt-[60px]">
-                    <div className="w-24 h-24 bg-blue-600 text-white rounded-3xl flex items-center justify-center mb-6 shadow-2xl shadow-blue-600/30">
-                        <Loader2 size={40} strokeWidth={2} className="animate-spin" />
-                    </div>
-                    <h3 className="text-2xl font-black text-slate-800 tracking-tight">Computing Grid Variables...</h3>
-                    <p className="text-slate-500 font-bold tracking-wide mt-3 max-w-sm text-center text-sm uppercase">Transpiling matrix parameters. Please hold.</p>
-                </div>
-            )}
-
-            {drafts.length > 0 && selectedDraft && (
-                <>
-                    <div className="flex flex-1 overflow-hidden relative">
-                        <div className="flex-1 overflow-y-auto p-6 relative">
-                           <PreviewGrid timetable={selectedDraft.timetable} title={`Algorithmic Option ${String.fromCharCode(65 + selectedIndex)}`} />
+            {/* HEADER - Only visible when waiting */}
+            {(!drafts.length && !generating) && (
+                <header className="st-header">
+                    <div>
+                        <div className="st-brand-row">
+                            <h1 className="st-title">Timetable Intelligence</h1>
+                            <div className={`st-status-pill ${activeGeneration ? 'st-status-active' : 'st-status-error'}`}>
+                                <span className={`st-pulse-dot ${activeGeneration ? 'primary' : 'error'}`}></span>
+                                {activeGeneration ? activeGeneration.name : 'Unconfigured'}
+                            </div>
                         </div>
-                        <AnalyticsPanel draft={selectedDraft} />
+                        <p className="st-desc">
+                            {pendingDraftState?.hasPending 
+                                ? "Warning: Uncleared draft configurations exist in the registry."
+                                : "System parameters initialized. Adjust scopes and initiate algorithmic generation."}
+                        </p>
                     </div>
 
-                    {/* Alternatives Panel */}
-                    <div className="shrink-0 bg-slate-50/80 p-5 shadow-[0_-15px_30px_-15px_rgba(0,0,0,0.05)] border-t border-slate-200/60 z-20">
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 ml-1">Structural Variant Outputs</h2>
-                            <button onClick={handlePublish} className="text-xs font-black uppercase tracking-widest bg-blue-600 text-white px-6 py-3.5 rounded-xl hover:bg-blue-700 transition-all shadow-lg hover:shadow-blue-600/30 hover:-translate-y-0.5">
-                                Finalize Map Option {String.fromCharCode(65 + selectedIndex)}
+                    <div className="st-controls">
+                        <select className="st-select" value={targetProgram} onChange={e => setTargetProgram(e.target.value)}>
+                            <option value="" disabled>Select Program</option>
+                            {programs.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
+                        </select>
+                        <select className="st-select" value={targetYear} onChange={e => setTargetYear(e.target.value)}>
+                            <option value="" disabled>Select Year</option>
+                            {years.map(y => <option key={y._id} value={y._id}>{y.yearNumber} Year</option>)}
+                        </select>
+                    </div>
+                </header>
+            )}
+
+            {/* VIEW 1: Awaiting Generation */}
+            {isUnconfigured && (
+                <section className="st-center-state">
+                    <div className="st-center-box">
+                        <div className="st-icon-wrapper">
+                            <div className="st-icon-blur primary"></div>
+                            <div className="st-icon-container">
+                                <span className="material-symbols-outlined">bolt</span>
+                            </div>
+                        </div>
+                        <h2 className="st-center-title">Awaiting Directive</h2>
+                        <p className="st-center-desc">
+                            Matrix primed for execution. Activate solver to resolve scheduling parameters.
+                        </p>
+                        <div className="st-btn-group">
+                            <button 
+                                onClick={handleGenerate} disabled={!targetProgram || !targetYear}
+                                className="st-btn st-btn-primary"
+                            >
+                                <span className="material-symbols-outlined">auto_fix_high</span>
+                                Generate Algorithm
                             </button>
                         </div>
-                        <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar">
-                            {drafts.map((draft, i) => (
-                                <OptionCard 
-                                    key={i} 
-                                    draft={draft} 
-                                    index={i} 
-                                    isSelected={selectedIndex === i}
-                                    onSelect={(d, idx) => { setSelectedDraft(d); setSelectedIndex(idx); }}
-                                />
-                            ))}
+                    </div>
+                </section>
+            )}
+
+            {/* VIEW 1-B: Pending Drafts */}
+            {isPendingDrafts && (
+                <section className="st-center-state">
+                    <div className="st-center-box">
+                        <div className="st-icon-wrapper">
+                            <div className="st-icon-blur error"></div>
+                            <div className="st-icon-container">
+                                <span className="material-symbols-outlined style-error">warning</span>
+                            </div>
+                        </div>
+                        <h2 className="st-center-title">Pending Drafts Found</h2>
+                        <p className="st-center-desc">
+                           Unpublished options exist in memory. Inspect or clear to continue.
+                        </p>
+                        <div className="st-btn-group">
+                            <button onClick={handleLoadPending} className="st-btn st-btn-dark">
+                                <span className="material-symbols-outlined">visibility</span>
+                                View Drafts
+                            </button>
+                            <button onClick={handleClearPending} className="st-btn st-btn-error">
+                                <span className="material-symbols-outlined">delete</span>
+                                Discard
+                            </button>
                         </div>
                     </div>
-                </>
+                </section>
             )}
+
+            {/* VIEW 2: Computing */}
+            {isComputing && (
+                <section className="st-center-state">
+                    <div className="st-loading-bg"></div>
+                    <div className="st-center-box">
+                        <div className="st-icon-wrapper">
+                            <div className="st-icon-blur primary"></div>
+                            <div className="st-icon-container blue">
+                                <span className="material-symbols-outlined">sync</span>
+                            </div>
+                        </div>
+                        <h2 className="st-center-title">Computing Variables...</h2>
+                        <p className="st-center-desc" style={{marginBottom: 0}}>
+                            Transpiling matrix parameters. Please hold.
+                        </p>
+                        <div className="st-progress-area">
+                            <div className="st-progress-bar">
+                                <div className="st-progress-fill"></div>
+                            </div>
+                            <div className="st-metrics">
+                                <div className="st-metric">
+                                    <span>Entropy</span>
+                                    <span>Calculations</span>
+                                </div>
+                                <div className="st-divider"></div>
+                                <div className="st-metric">
+                                    <span>Load</span>
+                                    <span>Executing Logic</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            )}
+
+            {/* VIEW 3: Result Viewer */}
+            {isResult && (
+                <div className="st-viewer-layout">
+                    <div className="st-viewer-header">
+                        <div className="st-brand-row">
+                            <h1 className="st-title" style={{fontSize: '2rem'}}>Draft Active</h1>
+                            <div className="st-active-pill">
+                                <span className="st-pulse-dot primary"></span> Active Result
+                            </div>
+                        </div>
+                        <p className="st-viewer-subtitle">Stitch Decision Support Framework Version 4.2.1-Alpha</p>
+                    </div>
+
+                    <div className="st-content">
+                        <div className="st-main-canvas">
+                            <PreviewGrid timetable={selectedDraft.timetable} title="Timetable Layout" />
+                        </div>
+                        <AnalyticsPanel draft={selectedDraft} index={selectedIndex} onPublish={handlePublish} />
+                    </div>
+
+                    <div className="st-tray">
+                        <div className="st-tray-box">
+                            <div className="st-tray-header">
+                                <h2 className="st-tray-title">Alternatives Map</h2>
+                                <span className="st-health-pill">{drafts.length} Found</span>
+                            </div>
+                            <div className="st-tray-track">
+                                {drafts.map((draft, i) => (
+                                    <OptionCard key={i} draft={draft} index={i} isSelected={i === selectedIndex} onSelect={setSelectedDraft} />
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
         </div>
     );
 };
