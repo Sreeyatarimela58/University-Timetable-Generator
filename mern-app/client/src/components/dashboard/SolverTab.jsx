@@ -463,7 +463,7 @@ export const SolverTab = () => {
                 <div className="st-viewer-layout">
                     <div className="st-content">
                         <div className="st-main-canvas">
-                            <PreviewGrid timetable={selectedDraft.timetable} title="Timetable Layout" />
+                            <PreviewGrid timetable={selectedDraft.timetable} title="Timetable" />
                         </div>
                         <AnalyticsPanel draft={selectedDraft} index={selectedIndex} onPublish={handlePublish} />
                     </div>

@@ -50,6 +50,8 @@
   height: calc(100% + 64px); /* Cancel 32px top/bottom padding */
   width: calc(100% + 80px);  /* Cancel 40px left/right padding */
   margin: -32px -40px; 
+  padding: 24px;
+  box-sizing: border-box;
   background-color: #ffffff;
   color: var(--st-on-surface);
   font-family: 'Inter', sans-serif;
@@ -575,7 +577,7 @@
 
 /* Alternatives Tray */
 .st-tray {
-  height: 100px;
+  height: 180px;
   border-top: 1px solid rgba(193,198,215,0.2);
   flex-shrink: 0;
 }
@@ -817,8 +819,6 @@
   text-transform: uppercase;
   letter-spacing: 0.2em;
   background-color: #ffffff;
-  border-bottom: 1px solid rgba(193,198,215,0.2);
-  border-top: 1px solid rgba(193,198,215,0.2);
 }
 .tt-cell-unassigned {
   background-color: var(--st-error-container);
