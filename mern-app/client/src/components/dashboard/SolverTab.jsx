@@ -207,18 +207,65 @@ export const SolverTab = () => {
     const [targetProgram, setTargetProgram] = useState('');
     const [targetYear, setTargetYear] = useState('');
     const [activeGeneration, setActiveGeneration] = useState(null);
+    const [pendingDraftState, setPendingDraftState] = useState(null);
+
+    const checkPendingDrafts = async () => {
+        try {
+            const res = await api.get('/drafts/pending/summary');
+            setPendingDraftState(res.data);
+        } catch (e) {
+            console.error("Failed to check pending drafts", e);
+        }
+    };
+
+    const handleLoadPending = async () => {
+        if (!pendingDraftState?.draftId) return;
+        setGenerating(true);
+        try {
+            const id = pendingDraftState.draftId;
+            setDraftId(id);
+            const draftRes = await api.get(`/drafts/${id}`);
+            const loadedDrafts = draftRes.data.drafts || [];
+            setDrafts(loadedDrafts);
+            if (loadedDrafts.length > 0) {
+               setSelectedDraft(loadedDrafts[0]);
+               setSelectedIndex(0);
+            }
+        } catch (err) {
+            setError('Failed to load pending draft');
+        } finally {
+            setGenerating(false);
+        }
+    };
+
+    const handleClearPending = async () => {
+        if (!confirm('Are you sure you want to clear all pending generated drafts?')) return;
+        try {
+            await api.delete('/drafts/pending/clear');
+            setPendingDraftState({ hasPending: false });
+            setDrafts([]);
+            setDraftId(null);
+            setSelectedDraft(null);
+        } catch (err) {
+            setError('Failed to clear pending drafts');
+        }
+    };
+
+
 
     useEffect(() => {
         const fetchFilters = async () => {
             try {
-                const [progRes, yearRes, genRes] = await Promise.all([
+                const [progRes, yearRes, genRes, pendingRes] = await Promise.all([
                     api.get('/programs'),
                     api.get('/academicyears'),
-                    api.get('/generation/active')
+                    api.get('/generation/active'),
+                    api.get('/drafts/pending/summary')
                 ]);
                 setPrograms(progRes.data);
                 setYears(yearRes.data);
                 setActiveGeneration(genRes.data);
+                setPendingDraftState(pendingRes.data);
                 if (progRes.data.length > 0) setTargetProgram(progRes.data[0]._id);
                 if (yearRes.data.length > 0) setTargetYear(yearRes.data[0]._id);
             } catch (err) {
@@ -320,6 +367,7 @@ export const SolverTab = () => {
             setDrafts([]);
             setDraftId(null);
             setSelectedDraft(null);
+            setPendingDraftState({ hasPending: false });
         } catch (err) {
             setPublishMsg(err.response?.data?.error || 'Publish failed.');
         }
@@ -390,13 +438,33 @@ export const SolverTab = () => {
             )}
 
             {/* Main Content Area */}
-            {!drafts.length && !generating && !error && !publishMsg && (
+            {!drafts.length && !generating && !error && !publishMsg && !pendingDraftState?.hasPending && (
                 <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50/50 backdrop-blur-sm -mt-[60px]">
                     <div className="w-24 h-24 bg-white text-slate-400 rounded-3xl flex items-center justify-center mb-6 shadow-sm border border-slate-200 group-hover:scale-105 transition-transform">
                         <Zap size={36} strokeWidth={1.5} />
                     </div>
                     <h3 className="text-2xl font-black text-slate-800 tracking-tight">Awaiting Generation Directive</h3>
                     <p className="text-slate-500 font-medium mt-2 max-w-sm text-center">Execute the algorithmic solver to construct high-density schedules and diagnostic mitigations natively.</p>
+                </div>
+            )}
+
+            {!drafts.length && !generating && !error && !publishMsg && pendingDraftState?.hasPending && (
+                <div className="flex-1 flex flex-col items-center justify-center p-8 bg-rose-50/50 backdrop-blur-sm -mt-[60px] border border-rose-100 m-8 rounded-3xl shadow-sm">
+                    <div className="w-24 h-24 bg-white text-rose-500 rounded-3xl flex items-center justify-center mb-6 shadow-sm border border-rose-200 group-hover:scale-105 transition-transform">
+                        <AlertTriangle size={36} strokeWidth={1.5} />
+                    </div>
+                    <h3 className="text-2xl font-black text-slate-800 tracking-tight text-center">Unpublished Drafts Detected</h3>
+                    <p className="text-slate-500 font-medium mt-2 max-w-md text-center mb-8">
+                        The engine found pending draft options that have not been finalized or cleared. You must resolve these before generating a new scope.
+                    </p>
+                    <div className="flex gap-4">
+                        <button onClick={handleLoadPending} className="bg-slate-900 text-white hover:bg-black font-bold tracking-wide px-6 py-3 rounded-xl shadow-lg transition-all hover:-translate-y-0.5">
+                            View Pending Drafts
+                        </button>
+                        <button onClick={handleClearPending} className="bg-white text-rose-600 border border-slate-200 hover:border-rose-300 hover:bg-rose-50 font-bold tracking-wide px-6 py-3 rounded-xl shadow-sm transition-all">
+                            Discard All Pending Drafts
+                        </button>
+                    </div>
                 </div>
             )}
 

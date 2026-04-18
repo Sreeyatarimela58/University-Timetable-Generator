@@ -477,7 +477,7 @@ export const generateDrafts = async (req, res) => {
             confidence: primaryDraft.summary.confidence,
             constraintSaturation: parseFloat(constraintSaturation.toFixed(3)),
             slotSpreadScore,
-            topBottleneck,
+            topBottleneck: primaryDraft.analytics.topBottleneck,
             systemHealthStatus: primaryDraft.systemHealth.status,
             solverTimeMs: primaryDraft.meta.solverTimeMs,
         }));
@@ -615,6 +615,28 @@ export const getActiveGeneration = async (req, res) => {
         const generation = await models.Generation.findOne({ status: 'ACTIVE' });
         if (!generation) return res.status(404).json({ error: 'No active generation found.' });
         res.json(generation);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const getPendingDraftSummary = async (req, res) => {
+    try {
+        const drafts = await models.DraftTimetable.find({}, '_id');
+        if (drafts.length > 0) {
+            res.json({ hasPending: true, draftId: drafts[0]._id });
+        } else {
+            res.json({ hasPending: false });
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export const clearPendingDrafts = async (req, res) => {
+    try {
+        await models.DraftTimetable.deleteMany({});
+        res.json({ message: 'All pending drafts cleared.' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
