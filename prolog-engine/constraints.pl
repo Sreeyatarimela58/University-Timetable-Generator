@@ -87,7 +87,12 @@ apply_fact_unavailable(Assignments) :-
     findall(unav(TID, DID, SNum), 
             (solver:unavailable(TAtom, DAtom, SNum), teacher_data(TID, TAtom, _), day_data(DID, DAtom)),
             Unavs),
-    apply_unavs_loop(Assignments, Unavs).
+    apply_unavs_loop(Assignments, Unavs),
+    
+    findall(unavR(RID, DID, SNum), 
+            (solver:unavailable_room(RAtom, DAtom, SNum), room_data(RID, RAtom, _, _), day_data(DID, DAtom)),
+            UnavRooms),
+    apply_runavs_loop(Assignments, UnavRooms).
 
 apply_allowed_teachers([]).
 apply_allowed_teachers([assign(Sec, C, T, _, _, _, Status) | Rest]) :-
@@ -106,6 +111,16 @@ apply_unav_single([], _, _, _, _).
 apply_unav_single([unav(TID, DID, SNum) | Rest], T, D, S, Status) :-
     (Status #= 1 #/\ T #= TID #/\ D #= DID) #==> (S #\= SNum),
     apply_unav_single(Rest, T, D, S, Status).
+
+apply_runavs_loop([], _).
+apply_runavs_loop([assign(_, _, _, R, D, S, Status) | Rest], UnavRooms) :-
+    apply_runav_single(UnavRooms, R, D, S, Status),
+    apply_runavs_loop(Rest, UnavRooms).
+
+apply_runav_single([], _, _, _, _).
+apply_runav_single([unavR(RID, DID, SNum) | Rest], R, D, S, Status) :-
+    (Status #= 1 #/\ R #= RID #/\ D #= DID) #==> (S #\= SNum),
+    apply_runav_single(Rest, R, D, S, Status).
 
 % 9: Single Teacher Per Course
 apply_single_teacher_per_course([]).
@@ -131,6 +146,7 @@ apply_lab_lunch_rule([assign(_, C, _, _, _, S, Status) | Rest]) :-
     apply_lab_lunch_rule(Rest).
 
 % 13: Lunch Constraint
+apply_lunch_constraint(_) :- solver:relax_lunch, !.
 apply_lunch_constraint(Assignments) :-
     findall(Sec, solver:section(Sec, _), Secs),
     apply_lunch_sections(Secs, Assignments).
@@ -160,6 +176,7 @@ get_bool_vars([assign(SecA, _, _, _, D, Slot, Status)|Rest], Sec, Day, TargetSlo
     get_bool_vars(Rest, Sec, Day, TargetSlot, BRest).
 
 % 14: Teacher Fatigue
+apply_teacher_fatigue(_) :- solver:relax_fatigue, !.
 apply_teacher_fatigue(Assignments) :-
     findall(TID, teacher_data(TID, _, _), TIDs),
     apply_tc_loop(TIDs, Assignments).
@@ -194,6 +211,7 @@ get_tbv([assign(_, _, T, _, D, S, Status)|Rest], TID, Day, Slot, [B|BRest]) :-
     get_tbv(Rest, TID, Day, Slot, BRest).
 
 % 15: Section Fatigue
+apply_section_fatigue(_) :- solver:relax_fatigue, !.
 apply_section_fatigue(Assignments) :-
     findall(Sec, solver:section(Sec, _), Secs),
     apply_sc_loop(Secs, Assignments).

@@ -8,13 +8,13 @@
 :- use_module(heuristics).
 :- use_module(output).
 
-:- dynamic teacher/2, room/3, section/2, course/4, section_course/2, allowed_teachers/3, unavailable/3, locked_assignment/4, day/1, slot/1.
+:- dynamic teacher/2, room/3, section/2, course/4, section_course/2, allowed_teachers/3, unavailable/3, unavailable_room/3, locked_assignment/4, day/1, slot/1, relax_fatigue/0, relax_lunch/0.
 
 main([File]) :-
     retractall(teacher(_, _)), retractall(room(_, _, _)), retractall(section(_, _)),
     retractall(course(_, _, _, _)), retractall(section_course(_, _)), retractall(allowed_teachers(_, _, _)),
-    retractall(unavailable(_, _, _)), retractall(locked_assignment(_, _, _, _)),
-    retractall(day(_)), retractall(slot(_)),
+    retractall(unavailable(_, _, _)), retractall(unavailable_room(_, _, _)), retractall(locked_assignment(_, _, _, _)),
+    retractall(day(_)), retractall(slot(_)), retractall(relax_fatigue), retractall(relax_lunch),
     
     consult(File),
     
@@ -34,13 +34,13 @@ main([File]) :-
                 call_with_time_limit(3.5, (
                     MinRequired is TotalAssigns * 7 // 10,
                     TotalScheduled #>= MinRequired,
-                    labeling([max(TotalScheduled), ffc, bisect, max(Score)], Vars),
+                    labeling([max(TotalScheduled), ffc, bisect, down], Vars),
                     StateStr = "optimal"
                 )),
                 time_limit_exceeded,
                 (
                     writeln(user_error, 'TIMEOUT_RECOVERY'), 
-                    once(labeling([ffc], Vars)),
+                    once(labeling([ffc, bisect, down], Vars)),
                     StateStr = "timeout_recovery"
                 )
             )
