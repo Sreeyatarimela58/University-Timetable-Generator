@@ -59,13 +59,57 @@ const AnalyticsPanel = ({ draft }) => {
             <div>
                 <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 mb-3 ml-1">Performance Tracking</h3>
                 <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-100 shadow-sm">
-                        <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">Confidence Node</div>
-                        <div className="text-2xl font-black tracking-tight text-slate-800">{percent(summary.confidence)}</div>
-                    </div>
-                    <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-100 shadow-sm">
-                        <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">Quality Spread</div>
+                    <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center">
+                        <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1 flex items-center gap-1">
+                            <span className="text-emerald-500">✔</span> Scheduled
+                        </div>
                         <div className="text-2xl font-black tracking-tight text-slate-800">{percent(summary.qualityScore)}</div>
+                    </div>
+                    <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center">
+                        <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1 flex items-center gap-1">
+                            <span className="text-blue-500">★</span> Confidence
+                        </div>
+                        <div className={`text-2xl font-black tracking-tight ${
+                            summary.confidence >= 0.8 ? 'text-emerald-700' :
+                            summary.confidence >= 0.5 ? 'text-amber-700' : 'text-rose-700'
+                        }`}>{percent(summary.confidence)}</div>
+                    </div>
+                    <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center">
+                        <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1 flex items-center gap-1 truncate">
+                            <span className="text-amber-500">⚠</span> Saturation
+                        </div>
+                        <div className={`text-2xl font-black tracking-tight ${
+                            (analytics?.constraintSaturation || 0) > 0.85 ? 'text-rose-700' :
+                            (analytics?.constraintSaturation || 0) > 0.6 ? 'text-amber-700' : 'text-slate-800'
+                        }`}>{percent(analytics?.constraintSaturation || 0)}</div>
+                    </div>
+                    <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center">
+                        <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1 flex items-center gap-1">
+                            <span className="text-indigo-500">≈</span> Spread
+                        </div>
+                        <div className={`text-2xl font-black tracking-tight ${
+                            (analytics?.slotSpreadScore ?? 1) >= 0.6 ? 'text-emerald-700' :
+                            (analytics?.slotSpreadScore ?? 1) >= 0.3 ? 'text-amber-700' : 'text-rose-700'
+                        }`}>{analytics?.slotSpreadScore?.toFixed(2) ?? '—'}</div>
+                    </div>
+                    <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center col-span-2">
+                        <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1 flex items-center gap-1">
+                            <span className="text-rose-500">🔥</span> Bottleneck
+                        </div>
+                        <div className="text-sm font-black tracking-tight text-slate-800 truncate">
+                            {analytics?.topBottleneck !== 'None' ? `${analytics.topBottleneck} (${percent(analytics.bottleneckImpact)} occupied)` : 'None detected'}
+                        </div>
+                    </div>
+                    <div className="bg-slate-50/80 p-3 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-2 col-span-2">
+                        <span className="text-slate-500">⚙</span>
+                        <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Mode:</span>
+                        <span className={`text-[10px] uppercase font-black px-2 py-0.5 rounded ${
+                            analytics?.solverMode === 'STRICT' ? 'bg-emerald-100 text-emerald-700' :
+                            analytics?.solverMode === 'FAILED' ? 'bg-rose-100 text-rose-700' :
+                            'bg-amber-100 text-amber-700'
+                        }`}>
+                            {analytics?.solverMode || 'UNKNOWN'}
+                        </span>
                     </div>
                 </div>
                 {meta.stabilityPending && (
@@ -157,7 +201,39 @@ export const SolverTab = () => {
     const [publishMsg, setPublishMsg] = useState('');
     const [published, setPublished] = useState(false);
 
+    // Context Loading
+    const [programs, setPrograms] = useState([]);
+    const [years, setYears] = useState([]);
+    const [targetProgram, setTargetProgram] = useState('');
+    const [targetYear, setTargetYear] = useState('');
+    const [activeGeneration, setActiveGeneration] = useState(null);
+
+    useEffect(() => {
+        const fetchFilters = async () => {
+            try {
+                const [progRes, yearRes, genRes] = await Promise.all([
+                    api.get('/programs'),
+                    api.get('/academicyears'),
+                    api.get('/generation/active')
+                ]);
+                setPrograms(progRes.data);
+                setYears(yearRes.data);
+                setActiveGeneration(genRes.data);
+                if (progRes.data.length > 0) setTargetProgram(progRes.data[0]._id);
+                if (yearRes.data.length > 0) setTargetYear(yearRes.data[0]._id);
+            } catch (err) {
+                console.error("Failed to fetch context scopes:", err);
+            }
+        };
+        fetchFilters();
+    }, []);
+
     const handleGenerate = async () => {
+        if (!targetProgram || !targetYear) {
+            setError('Please select a Target Program and Year Scope before generating.');
+            return;
+        }
+
         setGenerating(true);
         setError('');
         setDraftId(null);
@@ -167,7 +243,7 @@ export const SolverTab = () => {
         setPublishMsg('');
         setPublished(false);
         try {
-            const res = await api.post('/generate-drafts');
+            const res = await api.post('/generate-drafts', { programId: targetProgram, yearId: targetYear });
             const id = res.data.draftId;
             setDraftId(id);
             const draftRes = await api.get(`/drafts/${id}`);
@@ -256,16 +332,49 @@ export const SolverTab = () => {
             <div className="shrink-0 flex justify-between items-center px-8 py-5 border-b bg-white shadow-sm z-20">
                 <div>
                     <h2 className="text-2xl font-black text-slate-800 tracking-tight">Timetable Intelligence Dashboard</h2>
-                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mt-1">Stitch Decision Support Framework</p>
+                    <div className="flex items-center gap-2 mt-1">
+                         <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Stitch Decision Support Framework •</p>
+                         {activeGeneration ? (
+                             <span className="text-[10px] font-black uppercase text-blue-600 bg-blue-50 px-2 py-0.5 rounded shadow-sm border border-blue-100 flex items-center gap-1">
+                                 <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+                                 {activeGeneration.name}
+                             </span>
+                         ) : (
+                             <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded shadow-sm">Configuring Generation bounds...</span>
+                         )}
+                    </div>
                 </div>
-                <button
-                    onClick={handleGenerate}
-                    disabled={generating}
-                    className="bg-slate-900 hover:bg-black text-white font-bold tracking-wide px-6 py-3 rounded-xl shadow-lg shadow-black/20 transition-all flex items-center gap-2 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 disabled:shadow-none"
-                >
-                    {generating ? <Loader2 size={18} className="animate-spin" /> : <Zap size={18} />}
-                    {generating ? 'Processing Engine...' : 'Generate Algorithm'}
-                </button>
+                
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 bg-slate-50 border p-1 rounded-xl">
+                         <select 
+                             className="bg-transparent text-sm font-bold text-slate-700 px-3 py-2 outline-none cursor-pointer"
+                             value={targetProgram}
+                             onChange={(e) => setTargetProgram(e.target.value)}
+                         >
+                             <option value="" disabled>Select Program</option>
+                             {programs.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
+                         </select>
+                         <div className="w-[1px] h-6 bg-slate-200"></div>
+                         <select 
+                             className="bg-transparent text-sm font-bold text-slate-700 px-3 py-2 outline-none cursor-pointer"
+                             value={targetYear}
+                             onChange={(e) => setTargetYear(e.target.value)}
+                         >
+                             <option value="" disabled>Select Year</option>
+                             {years.map(y => <option key={y._id} value={y._id}>{y.yearNumber} Year</option>)}
+                         </select>
+                    </div>
+
+                    <button
+                        onClick={handleGenerate}
+                        disabled={generating || !targetProgram || !targetYear}
+                        className="bg-slate-900 hover:bg-black text-white font-bold tracking-wide px-6 py-3 rounded-xl shadow-lg shadow-black/20 transition-all flex items-center gap-2 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 disabled:shadow-none"
+                    >
+                        {generating ? <Loader2 size={18} className="animate-spin" /> : <Zap size={18} />}
+                        {generating ? 'Processing Engine...' : 'Generate Algorithm'}
+                    </button>
+                </div>
             </div>
 
             {error && (
