@@ -35,6 +35,8 @@ export const getAll = async (req, res) => {
             query = query.populate('programId');
         } else if (entity === 'courseassignments') {
             query = query.populate('courseId sectionId theoryTeacherIds labTeacherIds');
+        } else if (entity === 'timetables') {
+            query = query.populate('courseId teacherId roomId sectionId');
         }
 
         const data = await query.exec();
@@ -49,7 +51,16 @@ export const getById = async (req, res) => {
         const Model = getModel(req.params.entity);
         if (!Model) return res.status(404).json({ error: 'Entity not found' });
         
-        const data = await Model.findById(req.params.id);
+        const entity = req.params.entity.toLowerCase();
+        let query = Model.findById(req.params.id);
+
+        if (entity === 'timetables') {
+            query = query.populate('courseId teacherId roomId sectionId');
+        } else if (entity === 'courseassignments') {
+            query = query.populate('courseId sectionId theoryTeacherIds labTeacherIds');
+        }
+
+        const data = await query.exec();
         if (!data) return res.status(404).json({ error: 'Record not found' });
         
         res.json(data);

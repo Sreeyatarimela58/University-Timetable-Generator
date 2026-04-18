@@ -26,12 +26,12 @@ export const TimetableGrid = ({ sectionId }) => {
         api.get('/timetables').then(res => {
             let data = res.data;
             if (sectionId) {
-                data = data.filter(t => t.sectionId === sectionId);
+                data = data.filter(t => (t.sectionId?._id || t.sectionId) === sectionId);
             } else if (user) {
                 if (user.role === 'student' && user.sectionId)
-                    data = data.filter(t => t.sectionId === user.sectionId);
+                    data = data.filter(t => (t.sectionId?._id || t.sectionId) === user.sectionId);
                 else if (user.role === 'prof' && user.profileId)
-                    data = data.filter(t => t.teacherId === user.profileId);
+                    data = data.filter(t => (t.teacherId?._id || t.teacherId) === user.profileId);
             }
             setScheduleData(data);
             setLoading(false);
