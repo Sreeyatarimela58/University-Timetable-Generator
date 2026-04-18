@@ -11,12 +11,65 @@ const timetableEntrySchema = new mongoose.Schema({
     roomName: String,
     day: String,
     slot: Number,
-    component: String
+    component: String,
+    status: { type: Number, default: 1 }, // 1 = scheduled, 0 = unscheduled
+    risk: String,
+    riskConfirmed: Boolean,
+    reason: String,
+    suggestion: {
+        primary: String,
+        secondary: String,
+        severity: String
+    }
 }, { _id: false });
 
 const draftSchema = new mongoose.Schema({
-    score: { type: Number, required: true },
-    timetable: [timetableEntrySchema]
+    status: { type: String, enum: ['success', 'partial', 'infeasible'], default: 'success' },
+    solverState: { type: String, enum: ['optimal', 'partial', 'timeout_recovery', 'infeasible'], default: 'optimal' },
+    
+    scheduled: [timetableEntrySchema],
+    unscheduled: [timetableEntrySchema],
+    timetable: [timetableEntrySchema], // Backwards compatibility if needed
+
+    summary: {
+        total: Number,
+        scheduled: Number,
+        unscheduled: Number,
+        qualityScore: Number,
+        weightedScore: Number,
+        penaltyScore: Number,
+        confidence: Number,
+        trustScore: Number
+    },
+
+    analytics: {
+        failureSummary: mongoose.Schema.Types.Mixed,
+        topBottleneck: String,
+        bottleneckImpact: Number,
+        bottleneckContext: {
+            affectedSections: [String],
+            topAffectedCourses: [mongoose.Schema.Types.Mixed] // { courseId, failureCount }
+        },
+        stabilityScore: Number,
+        riskStats: {
+            truePositive: Number,
+            falsePositive: Number,
+            falseNegative: Number,
+            precision: Number,
+            recall: Number
+        }
+    },
+
+    systemHealth: {
+        status: { type: String, enum: ['healthy', 'strained', 'critical'] },
+        reason: String
+    },
+
+    meta: {
+        solutionHash: String,
+        solverTime: Number,
+        stabilityPending: { type: Boolean, default: true }
+    }
 }, { _id: false });
 
 const draftTimetableSchema = new mongoose.Schema({

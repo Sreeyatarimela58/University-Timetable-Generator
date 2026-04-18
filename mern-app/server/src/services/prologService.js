@@ -64,6 +64,10 @@ export async function executePrologSolver(factsString) {
 
         const { stdout, stderr } = await execPromise(cmd, { cwd: prologDir });
 
+        if (stderr && stderr.includes('FAILED_CONSTRAINT')) {
+            throw new Error("Constraint unsatisfiable. Prolog engine hit a deadlock or mathematical failure.");
+        }
+
         if (stderr) {
             console.warn(`[PrologService] Warnings/Errors from Prolog:\n${stderr}`);
         }
