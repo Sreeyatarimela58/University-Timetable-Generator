@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { MapPin, Users, RefreshCw } from 'lucide-react';
-import './TimetableGrid.css';
 
 const DAYS  = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const DAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
