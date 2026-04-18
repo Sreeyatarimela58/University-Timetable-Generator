@@ -29,7 +29,7 @@ export const PreviewGrid = ({ timetable = [], title = 'Draft Preview' }) => {
 
         const entry = findEntry(day, slot);
         if (entry) {
-            if (entry.status === 0 || !entry.scheduled) {
+            if (entry.status === 0) {
                  return <div className="tt-cell border-r last:border-r-0 bg-red-50 text-red-500 flex items-center justify-center text-xs font-semibold" key={`${day}-${slot}`}>Unassigned</div>;
             }
 
