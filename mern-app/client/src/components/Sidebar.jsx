@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutGrid, Building2, BookOpen, Users, Archive, Plus, HelpCircle, LogOut, Zap, Link as LinkIcon } from 'lucide-react';
+import { LayoutGrid, Building2, BookOpen, Users, Archive, HelpCircle, LogOut, Zap, Link as LinkIcon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const navItems = [
@@ -40,10 +40,6 @@ export default function Sidebar() {
 
             {/* Footer */}
             <div className="sidebar-footer">
-                <NavLink to="/admin/solver" className="sidebar-cta">
-                    <Plus size={16} />
-                    Create Schedule
-                </NavLink>
                 <div className="sidebar-footer-links">
                     <a href="#" className="nav-item" style={{ fontSize: '13px' }}>
                         <HelpCircle size={18} />

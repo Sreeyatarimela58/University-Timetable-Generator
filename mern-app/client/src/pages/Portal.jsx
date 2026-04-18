@@ -33,23 +33,25 @@ const ROLES = [
 
 export const Portal = () => (
     <AuthLayout>
-        <PortalHeader />
+        <div className="portal-container">
+            <PortalHeader />
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
-            {ROLES.map((role) => (
-                <PortalCard
-                    key={role.id}
-                    title={role.title}
-                    description={role.description}
-                    icon={role.icon}
-                    route={role.route}
-                    accent={role.accent}
-                />
-            ))}
+            <div className="portal-grid">
+                {ROLES.map((role) => (
+                    <PortalCard
+                        key={role.id}
+                        title={role.title}
+                        description={role.description}
+                        icon={role.icon}
+                        route={role.route}
+                        accent={role.accent}
+                    />
+                ))}
+            </div>
+
+            <p className="portal-footer-text">
+                Trusted by 50+ academic institutions
+            </p>
         </div>
-
-        <p className="text-center text-[11px] text-gray-400 tracking-wide mt-12">
-            Trusted by 50+ academic institutions
-        </p>
     </AuthLayout>
 );

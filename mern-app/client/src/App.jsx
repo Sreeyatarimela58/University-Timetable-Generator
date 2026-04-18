@@ -6,7 +6,7 @@ import { Portal } from './pages/Portal';
 import { Login } from './pages/Login';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Sidebar from './components/Sidebar';
-import TopHeader from './components/TopHeader';
+
 
 // Dashboard Tabs
 import { OverviewTab }       from './components/dashboard/OverviewTab';
@@ -42,7 +42,6 @@ const AdminLayout = ({ children }) => {
         <div className="app-layout">
             {!isFullWidth && <Sidebar />}
             <div className="app-main" style={isFullWidth ? { marginLeft: 0 } : {}}>
-                <TopHeader title={title} />
                 <div className="animate-in" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
                     {children}
                 </div>
