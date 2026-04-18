@@ -198,24 +198,34 @@ const createCoursesAndAssignments = async (programs, years, sections, faculty) =
     
     const facultyLoads = new Map(faculty.map(f => [f._id.toString(), { max: f.maxHoursPerWeek, current: 0, spec: f.specialization }]));
 
-    const getAvailableFaculty = (requiredHours, targetSpecialization) => {
+    // Returns a pool of 2-3 available teachers for a course.
+    // Pool size >= 2 is MANDATORY: single-teacher pools prevent the solver from
+    // recovering when a teacher is blocked by projection constraints.
+    const getTeacherPool = (requiredHours, targetSpecialization) => {
+        // First: try to find enough teachers from the target specialization
         let available = faculty.filter(f => {
             const load = facultyLoads.get(f._id.toString());
             return load.spec === targetSpecialization && (load.current + requiredHours) <= load.max;
         });
 
-        if (available.length === 0) {
+        // Fallback: if fewer than 2 in-spec teachers, widen to all faculty
+        if (available.length < 2) {
             available = faculty.filter(f => {
                 const load = facultyLoads.get(f._id.toString());
                 return (load.current + requiredHours) <= load.max;
             });
         }
 
-        if (available.length === 0) return null; 
-        
-        const chosen = faker.helpers.arrayElement(available);
-        facultyLoads.get(chosen._id.toString()).current += requiredHours;
-        return chosen;
+        if (available.length === 0) return [];
+
+        const shuffled = faker.helpers.shuffle([...available]);
+        const poolSize = Math.min(shuffled.length, faker.number.int({ min: 2, max: 3 }));
+        const pool = shuffled.slice(0, poolSize);
+
+        // Charge hours against EVERY teacher in the pool so load tracking stays accurate
+        pool.forEach(t => { facultyLoads.get(t._id.toString()).current += requiredHours; });
+
+        return pool;
     };
 
     let courseCounter = 100;
@@ -257,19 +267,18 @@ const createCoursesAndAssignments = async (programs, years, sections, faculty) =
                 for (const section of yearSections) {
                     const theoryTeacherIds = [];
                     const labTeacherIds = [];
-                    
-                    const tTeacher = getAvailableFaculty(theoryTotal, program.domain);
-                    if (tTeacher) theoryTeacherIds.push(tTeacher._id);
+
+                    const theoryPool = getTeacherPool(theoryTotal, program.domain);
+                    theoryTeacherIds.push(...theoryPool.map(t => t._id));
 
                     if (labTotal > 0) {
-                        const lTeacher = getAvailableFaculty(labTotal, program.domain);
-                        if (lTeacher) labTeacherIds.push(lTeacher._id);
+                        const labPool = getTeacherPool(labTotal, program.domain);
+                        labTeacherIds.push(...labPool.map(t => t._id));
                     }
 
-                    // No fallback random assignment: skip if no teacher available
-                    // Surfaces real overload issues instead of hiding them with random picks
-                    if (theoryTeacherIds.length === 0) continue;
-                    if (labTotal > 0 && labTeacherIds.length === 0) continue;
+                    // Enforce minimum pool size of 2 — a single-teacher pool breaks solver flexibility
+                    if (theoryTeacherIds.length < 2) continue;
+                    if (labTotal > 0 && labTeacherIds.length < 2) continue;
 
                     const assignment = await CourseAssignment.create({
                         courseId: course._id,
@@ -286,13 +295,21 @@ const createCoursesAndAssignments = async (programs, years, sections, faculty) =
     // Sanity log: validate seeded data integrity before running solver
     const totalLoad = [...facultyLoads.values()].reduce((a, b) => a + b.current, 0);
     const avgLoad = faculty.length > 0 ? (totalLoad / faculty.length).toFixed(1) : 0;
+    const poolSizes = assignments.map(a => a.theoryTeacherIds.length);
+    const avgPoolSize = poolSizes.length > 0 ? (poolSizes.reduce((a, b) => a + b, 0) / poolSizes.length).toFixed(1) : 0;
+    const singleTeacherCount = poolSizes.filter(s => s < 2).length;
     console.log('\n Assignment Sanity Check:');
     console.log(JSON.stringify({
         totalAssignments: assignments.length,
         totalCourses: courses.length,
         teachersUsed: faculty.length,
         avgLoadHrs: Number(avgLoad),
+        avgTheoryPoolSize: Number(avgPoolSize),
+        singleTeacherAssignments: singleTeacherCount, // must be 0
     }, null, 2));
+    if (singleTeacherCount > 0) {
+        console.warn(`  WARNING: ${singleTeacherCount} assignments have pool size < 2. Solver flexibility is compromised.`);
+    }
 
     return { courses, assignments, facultyLoads };
 };
