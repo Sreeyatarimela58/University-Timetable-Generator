@@ -61,15 +61,27 @@ const draftSchema = new mongoose.Schema({
     },
 
     systemHealth: {
-        status: { type: String, enum: ['healthy', 'strained', 'critical'] },
+        status: { type: String, enum: ['healthy', 'strained', 'degraded', 'critical_degraded', 'critical'] },
         reason: String
     },
 
     meta: {
+        runId: String,
         solutionHash: String,
-        solverTime: Number,
-        stabilityPending: { type: Boolean, default: true }
-    }
+        solverTimeMs: Number,
+        asyncTimeMs: Number,
+        iterationsCount: Number,
+        stabilityPending: { type: Boolean, default: true },
+        lastUpdatedAt: { type: Date, default: Date.now }
+    },
+
+    auditLog: [{
+        runId: String,
+        qualityScore: Number,
+        stabilityScore: Number,
+        trustScore: Number,
+        timestamp: { type: Date, default: Date.now }
+    }]
 }, { _id: false });
 
 const draftTimetableSchema = new mongoose.Schema({
@@ -78,5 +90,8 @@ const draftTimetableSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now },
     expiresAt: { type: Date, default: () => new Date(Date.now() + 24 * 60 * 60 * 1000) } // 24h TTL
 });
+
+// Middleware to cap auditLog array globally across updates natively if needed
+// Or we cap it at generation time: {$push: { auditLog: { $each: [...], $slice: -20 } }} natively via Mongoose.
 
 export const DraftTimetable = mongoose.model('DraftTimetable', draftTimetableSchema);

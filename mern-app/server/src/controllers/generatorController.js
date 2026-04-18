@@ -5,6 +5,31 @@ import crypto from 'crypto';
 
 let isGenerating = false;
 
+const HEALTH_CONFIG = {
+    healthy: { minQuality: 0.9, maxFailure: 0.1 },
+    strained: { minQuality: 0.7 }
+};
+
+const DEGRADATION_CONFIG = {
+    warning: -0.10,
+    critical: -0.20
+};
+
+const MAX_STABILITY_WAIT = 30000;
+const MAX_WORKERS = 3;
+let activeWorkers = 0;
+const workerQueue = [];
+
+const processQueue = () => {
+    if (activeWorkers >= MAX_WORKERS || workerQueue.length === 0) return;
+    const job = workerQueue.shift();
+    activeWorkers++;
+    job().finally(() => {
+        activeWorkers--;
+        processQueue();
+    });
+};
+
 const DAYS_LENGTH = 5;
 const SLOTS_LENGTH = 8;
 const maxRoomSlots = DAYS_LENGTH * SLOTS_LENGTH;
@@ -17,14 +42,10 @@ const generateSystemFacts = (teachers, rooms, sections, courses, assignments) =>
     
     courses.forEach(c => {
         if (c.theorySessions?.length) {
-            c.theorySessions.forEach((duration, i) => {
-                facts += `course(id_${c._id}_T_${i}, theory, ${duration}, ${duration}).\n`;
-            });
+            c.theorySessions.forEach((duration, i) => facts += `course(id_${c._id}_T_${i}, theory, ${duration}, ${duration}).\n`);
         }
         if (c.labSessions?.length) {
-            c.labSessions.forEach((duration, i) => {
-                facts += `course(id_${c._id}_L_${i}, lab, ${duration}, ${duration}).\n`;
-            });
+            c.labSessions.forEach((duration, i) => facts += `course(id_${c._id}_L_${i}, lab, ${duration}, ${duration}).\n`);
         }
     });
 
@@ -50,7 +71,6 @@ const generateSystemFacts = (teachers, rooms, sections, courses, assignments) =>
     });
 
     teachers.forEach(t => t.unavailableSlots?.forEach(s => facts += `unavailable(id_${t._id}, ${s.day}, ${s.slot}).\n`));
-    
     facts += '\n% The Grid\n';
     facts += 'day(mon). day(tue). day(wed). day(thu). day(fri).\n';
     facts += 'slot(1). slot(2). slot(3). slot(4). slot(5). slot(6). slot(7). slot(8).\n';
@@ -64,14 +84,24 @@ export const generateDrafts = async (req, res) => {
 
     isGenerating = true;
 
-    // Metrics for failure logging
-    let totalSessions = 0;
-    let totalSlots = 0;
-    let teacherCapacity = 0;
+    // Fetch baseline for degradation tracking
+    const baselineRuns = await models.DraftTimetable.find().sort({createdAt: -1}).limit(10);
+    let baselineAvg = null;
+    if (baselineRuns.length >= 3) {
+        let sum = 0, count = 0;
+        baselineRuns.forEach(r => {
+            if (r.drafts && r.drafts[0]) {
+                sum += r.drafts[0].summary.qualityScore || 0;
+                count++;
+            }
+        });
+        if (count > 0) baselineAvg = sum / count;
+    }
+
+    let totalSessions = 0, totalSlots = 0, teacherCapacity = 0;
 
     try {
-        console.log('Starting draft generation with DSS Background Polling...');
-
+        console.log('Starting drift generation...');
         const teachers    = await models.Teacher.find();
         const rooms       = await models.Room.find();
         const sections    = await models.Section.find();
@@ -82,15 +112,6 @@ export const generateDrafts = async (req, res) => {
             return res.status(400).json({ error: 'Insufficient data for generation.' });
         }
 
-        for (const assignment of assignments) {
-            if (!assignment.theoryTeacherIds || assignment.theoryTeacherIds.length === 0) {
-                throw new Error(`No teachers assigned for course ${assignment.courseId}`);
-            }
-            if (assignment.theoryTeacherIds.length < 2) {
-                console.warn(`⚠️ Course ${assignment.courseId} has only 1 teacher`);
-            }
-        }
-
         totalSlots = rooms.length * maxRoomSlots;
         totalSessions = assignments.reduce((acc, a) => {
             const course = courses.find(c => c._id.toString() === a.courseId.toString());
@@ -98,14 +119,7 @@ export const generateDrafts = async (req, res) => {
             return acc + (course.theorySessions?.length || 0) + (course.labSessions?.length || 0);
         }, 0);
 
-        if (totalSessions > totalSlots) {
-            throw new Error("INSUFFICIENT ROOM CAPACITY");
-        }
-
-        teacherCapacity = teachers.reduce((acc, t) => acc + (t.maxHoursPerWeek || 0), 0);
-        if (totalSessions > teacherCapacity) {
-            console.warn("⚠️ Not enough teacher capacity");
-        }
+        if (totalSessions > totalSlots) throw new Error("INSUFFICIENT ROOM CAPACITY");
 
         assignments = faker.helpers.shuffle(assignments);
         assignments.sort((a, b) => {
@@ -115,34 +129,23 @@ export const generateDrafts = async (req, res) => {
         });
 
         const facts = generateSystemFacts(teachers, rooms, sections, courses, assignments);
-
+        
         console.log('Executing primary solver...');
         const engineResponse = await executePrologSolver(facts);
-
-        if (!engineResponse || !engineResponse.drafts) {
-            throw new Error('Solver failed to return valid JSON.');
-        }
+        if (!engineResponse || !engineResponse.drafts) throw new Error('Solver failed to return valid JSON.');
 
         const solverStartTime = Date.now();
         const cleanDrafts = engineResponse.drafts.map(draft => {
+            const currentRunId = crypto.randomUUID();
+            
             const scheduled = [];
             const unscheduled = [];
-            const failureSet = new Set();
             const failureSummary = {
-                roomContentions: 0,
-                teacherContentions: 0,
-                constraintDeadlocks: 0,
-                noRooms: 0,
-                noTeachers: 0
+                roomContentions: 0, teacherContentions: 0, constraintDeadlocks: 0, noRooms: 0, noTeachers: 0
             };
 
-            let totalWeight = 0;
-            let scheduledWeight = 0;
-            let unscheduledWeight = 0;
-            
-            let tp = 0; // True Positive (High Risk -> Failed)
-            let fp = 0; // False Positive (High Risk -> Succeeded)
-            let fn = 0; // False Negative (Low Risk -> Failed)
+            let totalWeight = 0, scheduledWeight = 0, unscheduledWeight = 0;
+            let tp = 0, fp = 0, fn = 0;
 
             draft.timetable.forEach(entry => {
                 const parts = entry.courseId.split('_');
@@ -157,33 +160,20 @@ export const generateDrafts = async (req, res) => {
                 const weight = componentCode === 'T' ? 1.0 : 2.0;
                 totalWeight += weight;
 
-                const assignment = assignments.find(a => 
-                    a.sectionId.toString() === entry.sectionId.replace('id_', '') && 
-                    a.courseId.toString() === cid
-                );
+                const assignment = assignments.find(a => a.sectionId.toString() === entry.sectionId.replace('id_', '') && a.courseId.toString() === cid);
                 const teacherPool = componentCode === 'T' ? (assignment?.theoryTeacherIds || []) : (assignment?.labTeacherIds || []);
-                const roomOptions = rooms.filter(r => 
-                    r.capacity >= (section?.strength || 0) && 
-                    (componentCode === 'T' ? r.type === 'classroom' : r.type === 'lab')
-                );
+                const roomOptions = rooms.filter(r => r.capacity >= (section?.strength || 0) && (componentCode === 'T' ? r.type === 'classroom' : r.type === 'lab'));
                 
                 const risk = (teacherPool.length === 1 || roomOptions.length <= 1) ? "high" : undefined;
                 const sectionSize = section?.strength || 0;
 
                 const mappedEntry = {
-                    sectionId: entry.sectionId.replace('id_', ''),
-                    sectionName: section?.name || 'Unknown',
-                    courseId: cid,
-                    courseName: course?.name || 'Unknown',
-                    teacherId: entry.teacherId === 'none' ? null : entry.teacherId.replace('id_', ''),
-                    teacherName: entry.teacherId === 'none' ? 'None' : (teacher?.name || 'Unknown'),
-                    roomId: entry.roomId === 'none' ? null : entry.roomId.replace('id_', ''),
-                    roomName: entry.roomId === 'none' ? 'None' : (room?.name || 'Unknown'),
-                    day: entry.day,
-                    slot: entry.slot,
-                    component: componentCode === 'T' ? 'theory' : 'lab',
-                    status: entry.status ?? 1,
-                    risk
+                    sectionId: entry.sectionId.replace('id_', ''), sectionName: section?.name || 'Unknown',
+                    courseId: cid, courseName: course?.name || 'Unknown',
+                    teacherId: entry.teacherId === 'none' ? null : entry.teacherId.replace('id_', ''), teacherName: entry.teacherId === 'none' ? 'None' : (teacher?.name || 'Unknown'),
+                    roomId: entry.roomId === 'none' ? null : entry.roomId.replace('id_', ''), roomName: entry.roomId === 'none' ? 'None' : (room?.name || 'Unknown'),
+                    day: entry.day, slot: entry.slot, component: componentCode === 'T' ? 'theory' : 'lab',
+                    status: entry.status ?? 1, risk
                 };
 
                 if (mappedEntry.status === 1) {
@@ -192,8 +182,7 @@ export const generateDrafts = async (req, res) => {
                     if (risk === "high") fp++; 
                 } else {
                     unscheduledWeight += weight;
-                    if (risk === "high") { mappedEntry.riskConfirmed = true; tp++; }
-                    else { fn++; }
+                    if (risk === "high") { mappedEntry.riskConfirmed = true; tp++; } else { fn++; }
 
                     let reason = "Constraint deadlock";
                     let suggestion = { primary: "Review grid constraints and overlaps", secondary: "Consider alternative time windows", severity: "medium" };
@@ -251,33 +240,25 @@ export const generateDrafts = async (req, res) => {
 
             const solverStateFallback = unscheduledCount === 0 ? "optimal" : (unscheduledCount === total ? "infeasible" : "partial");
             const solverState = engineResponse.solverState || solverStateFallback;
-            
             const solverReliabilityMap = { optimal: 1.0, partial: 0.8, timeout_recovery: 0.6, infeasible: 0.2 };
-            const solverReliability = solverReliabilityMap[solverState] || 0.5;
-            
-            const confidence = qualityScore * solverReliability;
-            const trustScore = (qualityScore * 0.4) + (confidence * 0.3); // Stability initially 0 until async finish
+            const confidence = qualityScore * (solverReliabilityMap[solverState] || 0.5);
+            const trustScore = Math.max(0, Math.min(1, (qualityScore * 0.4) + (confidence * 0.3))); // Stable later
 
-            const hashSource = [...scheduled].sort((a, b) => {
-                return (a.sectionId || "").localeCompare(b.sectionId || "") ||
-                       (a.day || "").localeCompare(b.day || "") ||
-                       (a.slot || 0) - (b.slot || 0);
-            }).map(s => `${s.courseId}-${s.teacherId}-${s.roomId}-${s.day}-${s.slot}`).join('|');
+            const hashSource = [...scheduled].sort((a, b) => (a.sectionId || "").localeCompare(b.sectionId || "") || (a.day || "").localeCompare(b.day || "") || (a.slot || 0) - (b.slot || 0))
+                .map(s => `${s.courseId}-${s.teacherId}-${s.roomId}-${s.day}-${s.slot}`).join('|');
             const solutionHash = crypto.createHash('md5').update(hashSource).digest('hex');
 
-            let maxFailures = 0;
-            let topBottleneck = "None";
-            Object.entries(failureSummary).forEach(([key, count]) => {
-                if (count > maxFailures) {
-                    maxFailures = count;
-                    topBottleneck = key;
-                }
-            });
+            let maxFailures = 0, topBottleneck = "None";
+            Object.entries(failureSummary).forEach(([key, count]) => { if (count > maxFailures) { maxFailures = count; topBottleneck = key; } });
             const bottleneckImpact = unscheduledCount > 0 ? parseFloat((maxFailures / unscheduledCount).toFixed(2)) : 0;
 
+            const severityMap = { "low": 1, "medium": 2, "high": 3 };
             const affectedCourseTracker = {};
             const affectedSectionSet = new Set();
+
             unscheduled.forEach(u => {
+                u.impactScore = bottleneckImpact * (severityMap[u.suggestion?.severity] || 1);
+                
                 let mappedKey = 'constraintDeadlocks';
                 if (u.reason === "No suitable room found (size/type mismatch)") mappedKey = 'noRooms';
                 else if (u.reason === "No teacher assigned") mappedKey = 'noTeachers';
@@ -290,101 +271,122 @@ export const generateDrafts = async (req, res) => {
                     affectedCourseTracker[u.courseName]++;
                 }
             });
-            const topAffectedCourses = Object.entries(affectedCourseTracker)
-                .map(([name, count]) => ({ courseId: name, failureCount: count }))
-                .sort((a,b) => b.failureCount - a.failureCount);
+            unscheduled.sort((a,b) => (b.impactScore !== a.impactScore) ? b.impactScore - a.impactScore : b.failureCount - a.failureCount);
+
+            const topAffectedCourses = Object.entries(affectedCourseTracker).map(([name, count]) => ({ courseId: name, failureCount: count })).sort((a,b) => b.failureCount - a.failureCount);
 
             const precision = (tp + fp) > 0 ? (tp / (tp + fp)) : 0;
             const recall = (tp + fn) > 0 ? (tp / (tp + fn)) : 0;
 
             let sysStatus = "critical";
-            if (qualityScore > 0.9 && failureRate < 0.1) sysStatus = "healthy";
-            else if (qualityScore > 0.7) sysStatus = "strained";
+            if (qualityScore >= HEALTH_CONFIG.healthy.minQuality && failureRate <= HEALTH_CONFIG.healthy.maxFailure) sysStatus = "healthy";
+            else if (qualityScore >= HEALTH_CONFIG.strained.minQuality) sysStatus = "strained";
             
-            const systemHealth = {
-                status: sysStatus,
-                reason: maxFailures > 0 ? `${topBottleneck} (${(bottleneckImpact * 100).toFixed(0)}%)` : 'Nominal execution'
-            };
+            if (baselineAvg !== null) {
+                const normalizedDelta = (qualityScore - baselineAvg) / baselineAvg;
+                let isDegraded = false;
+                if (normalizedDelta <= DEGRADATION_CONFIG.critical) { sysStatus = "critical_degraded"; isDegraded = true; }
+                else if (normalizedDelta <= DEGRADATION_CONFIG.warning) { sysStatus = "degraded"; isDegraded = true; }
+                
+                let historicalDegradations = isDegraded ? 1 : 0;
+                baselineRuns.slice(0,3).forEach(r => {
+                     if (r.drafts && r.drafts[0]) {
+                          if (((r.drafts[0].summary.qualityScore || 0) - baselineAvg) / baselineAvg <= DEGRADATION_CONFIG.warning) historicalDegradations++;
+                     }
+                });
+                
+                if (historicalDegradations < 2 && isDegraded) {
+                     if (qualityScore >= HEALTH_CONFIG.healthy.minQuality) sysStatus = "healthy";
+                     else if (qualityScore >= HEALTH_CONFIG.strained.minQuality) sysStatus = "strained";
+                     else sysStatus = "critical";
+                }
+            }
+
+            const solverTimeMs = Date.now() - solverStartTime;
 
             return {
                 status: unscheduledCount > 0 ? (solverState === 'infeasible' ? 'infeasible' : 'partial') : 'success',
-                solverState: solverState,
-                scheduled,
-                unscheduled,
-                summary: {
-                    total, scheduled: scheduledCount, unscheduled: unscheduledCount,
-                    qualityScore, weightedScore, penaltyScore, confidence, trustScore
-                },
+                solverState: solverState, scheduled, unscheduled,
+                summary: { total, scheduled: scheduledCount, unscheduled: unscheduledCount, qualityScore, weightedScore, penaltyScore, confidence, trustScore },
                 analytics: {
                     failureSummary, topBottleneck, bottleneckImpact,
                     bottleneckContext: { affectedSections: Array.from(affectedSectionSet), topAffectedCourses },
                     stabilityScore: 0,
                     riskStats: { truePositive: tp, falsePositive: fp, falseNegative: fn, precision, recall }
                 },
-                systemHealth,
-                meta: { solutionHash, solverTime: Date.now() - solverStartTime, stabilityPending: true },
+                systemHealth: { status: sysStatus, reason: maxFailures > 0 ? `${topBottleneck} (${(bottleneckImpact * 100).toFixed(0)}%)` : 'Nominal execution' },
+                meta: { runId: currentRunId, solutionHash, solverTimeMs, asyncTimeMs: 0, iterationsCount: 1, stabilityPending: true, lastUpdatedAt: Date.now() },
+                auditLog: [{ runId: currentRunId, qualityScore, stabilityScore: 0, trustScore, timestamp: Date.now() }],
                 timetable: scheduled 
             };
         });
 
         const draftDoc = await models.DraftTimetable.create({ drafts: cleanDrafts, createdBy: req.user._id });
-        res.json({ draftId: draftDoc._id }); // RETURN INSTANTLY
+        res.json({ draftId: draftDoc._id }); 
         
-        // --- ASYNC BACKGROUND WORKER (STABILITY POLLING) ---
-        (async () => {
+        workerQueue.push(async () => {
+            const asyncStart = Date.now();
             try {
-                console.log("Launching background stability polling...");
-                const ogDraft = cleanDrafts[0];
+                const ogDraft = cleanDrafts[0]; // Currently supporting single branch master returns
+                const targetDraftId = ogDraft._id || null; 
                 const ogHashArr = ogDraft.scheduled.map(s => `${s.courseId}-${s.teacherId}-${s.roomId}-${s.day}-${s.slot}`);
-                let simScores = [];
+                let overlapCount = 0;
                 
                 for (let i = 0; i < 2; i++) {
                     const shuffledAssigns = faker.helpers.shuffle([...assignments]).sort((a, b) => {
-                        return ((a.theoryTeacherIds?.length || 0) + (a.labTeacherIds?.length || 0)) - 
-                               ((b.theoryTeacherIds?.length || 0) + (b.labTeacherIds?.length || 0));
+                        return ((a.theoryTeacherIds?.length || 0) + (a.labTeacherIds?.length || 0)) - ((b.theoryTeacherIds?.length || 0) + (b.labTeacherIds?.length || 0));
                     });
                     
-                    const newFacts = generateSystemFacts(teachers, rooms, sections, courses, shuffledAssigns);
-                    const runResp = await executePrologSolver(newFacts);
-                    
+                    const runResp = await executePrologSolver(generateSystemFacts(teachers, rooms, sections, courses, shuffledAssigns));
                     if (runResp && runResp.drafts && runResp.drafts.length > 0) {
-                        const newSched = runResp.drafts[0].timetable.filter(t => (t.status ?? 1) === 1);
-                        const newHashArr = newSched.map(s => {
+                        const newHashArr = runResp.drafts[0].timetable.filter(t => (t.status ?? 1) === 1).map(s => {
                             const cidParts = s.courseId.split('_');
-                            const tId = s.teacherId === 'none' ? 'null' : s.teacherId.replace('id_', '');
-                            const rId = s.roomId === 'none' ? 'null' : s.roomId.replace('id_', '');
-                            return `${cidParts[1]}-${tId}-${rId}-${s.day}-${s.slot}`;
+                            return `${cidParts[1]}-${s.teacherId === 'none' ? 'null' : s.teacherId.replace('id_', '')}-${s.roomId === 'none' ? 'null' : s.roomId.replace('id_', '')}-${s.day}-${s.slot}`;
                         });
-                        
-                        let overlap = 0;
-                        newHashArr.forEach(h => { if (ogHashArr.includes(h)) overlap++; });
-                        simScores.push(ogHashArr.length > 0 ? (overlap / ogHashArr.length) : 1);
-                    } else {
-                        simScores.push(0);
+                        newHashArr.forEach(h => { if (ogHashArr.includes(h)) overlapCount++; });
                     }
                 }
 
-                const avgStability = simScores.reduce((a,b) => a+b, 0) / simScores.length;
-                let draftToUpdate = await models.DraftTimetable.findById(draftDoc._id);
+                const totalPossible = ogHashArr.length * 2;
+                const avgStability = totalPossible > 0 ? (overlapCount / totalPossible) : 1;
+                const asyncTimeMs = Date.now() - asyncStart;
+
+                // Enterprise Atomic Pattern & Mutex Matrix
+                const trustScoreFinal = Math.max(0, Math.min(1, (ogDraft.summary.qualityScore * 0.4) + (ogDraft.summary.confidence * 0.3) + (avgStability * 0.3)));
                 
-                if (draftToUpdate) {
-                    draftToUpdate.drafts.forEach(d => {
-                        d.analytics.stabilityScore = avgStability;
-                        d.summary.trustScore = (d.summary.qualityScore * 0.4) + (d.summary.confidence * 0.3) + (avgStability * 0.3);
-                        d.meta.stabilityPending = false;
-                    });
-                    await draftToUpdate.save();
-                    console.log(`Stability polling complete. Score: ${avgStability}`);
-                }
+                await models.DraftTimetable.updateOne(
+                    { _id: draftDoc._id, "drafts.meta.runId": ogDraft.meta.runId },
+                    { 
+                        $set: { 
+                            "drafts.$.analytics.stabilityScore": avgStability,
+                            "drafts.$.summary.trustScore": trustScoreFinal,
+                            "drafts.$.meta.stabilityPending": false,
+                            "drafts.$.meta.asyncTimeMs": asyncTimeMs,
+                            "drafts.$.meta.iterationsCount": 3,
+                            "drafts.$.meta.lastUpdatedAt": Date.now()
+                        },
+                        $push: {
+                            "drafts.$.auditLog": { 
+                                $each: [{
+                                    runId: ogDraft.meta.runId,
+                                    qualityScore: ogDraft.summary.qualityScore,
+                                    stabilityScore: avgStability,
+                                    trustScore: trustScoreFinal,
+                                    timestamp: Date.now()
+                                }],
+                                $slice: -20
+                            }
+                        }
+                    }
+                );
+                
+                console.log(`[SYS-DIAGNOSTIC] ${ogDraft.meta.runId} | Quality: ${ogDraft.summary.qualityScore} | Trust: ${trustScoreFinal.toFixed(2)} | Stable: ${avgStability.toFixed(2)}`);
             } catch (bgErr) {
                 console.error("Background worker failed:", bgErr);
-                let draftToUpdate = await models.DraftTimetable.findById(draftDoc._id);
-                if (draftToUpdate) {
-                    draftToUpdate.drafts.forEach(d => d.meta.stabilityPending = false);
-                    await draftToUpdate.save();
-                }
             }
-        })();
+        });
+        
+        processQueue();
 
     } catch (err) {
         console.error('Generator Error:', err);
@@ -397,6 +399,15 @@ export const generateDrafts = async (req, res) => {
 export const getDraft = async (req, res) => {
     try {
         const draft = await models.DraftTimetable.findById(req.params.id);
+        if (draft && draft.drafts[0] && draft.drafts[0].meta.stabilityPending) {
+             if (Date.now() - draft.drafts[0].meta.lastUpdatedAt > MAX_STABILITY_WAIT) {
+                 await models.DraftTimetable.updateOne(
+                    { _id: draft._id },
+                    { $set: { "drafts.$[].meta.stabilityPending": false } }
+                 );
+                 draft.drafts.forEach(d => d.meta.stabilityPending = false);
+             }
+        }
         res.json(draft);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -412,13 +423,9 @@ export const publishDraft = async (req, res) => {
         const chosen = draftDoc.drafts[parseInt(optionIndex, 10)];
         await models.Timetable.deleteMany({});
         await models.Timetable.insertMany(chosen.timetable.map(t => ({
-            sectionId: t.sectionId,
-            courseId: t.courseId,
-            teacherId: t.teacherId,
-            roomId: t.roomId,
-            day: t.day,
-            slot: t.slot,
-            component: t.component
+            sectionId: t.sectionId, courseId: t.courseId,
+            teacherId: t.teacherId, roomId: t.roomId,
+            day: t.day, slot: t.slot, component: t.component
         })));
 
         await models.DraftTimetable.findByIdAndDelete(draftId);
