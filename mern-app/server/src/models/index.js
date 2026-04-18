@@ -8,3 +8,4 @@ export { Course } from './Course.js';
 export { CourseAssignment } from './CourseAssignment.js';
 export { Timetable } from './Timetable.js';
 export { DraftTimetable } from './DraftTimetable.js';
+export { Generation } from './Generation.js';

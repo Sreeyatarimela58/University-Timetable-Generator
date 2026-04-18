@@ -2,6 +2,8 @@ import mongoose from 'mongoose';
 
 const timetableEntrySchema = new mongoose.Schema({
     sectionId: String,
+    programId: String,
+    yearId: String,
     sectionName: String,
     courseId: String,
     courseName: String,
@@ -67,6 +69,7 @@ const draftSchema = new mongoose.Schema({
 
     meta: {
         runId: String,
+        generationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Generation' },
         solutionHash: String,
         solverTimeMs: Number,
         asyncTimeMs: Number,

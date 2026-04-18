@@ -6,6 +6,21 @@ const timetableSchema = new mongoose.Schema({
         ref: 'Section',
         required: true
     },
+    programId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Program',
+        required: true
+    },
+    yearId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'AcademicYear',
+        required: true
+    },
+    generationId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Generation',
+        required: true
+    },
     courseId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Course',

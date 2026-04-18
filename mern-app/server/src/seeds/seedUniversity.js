@@ -12,6 +12,7 @@ import { Course } from '../models/Course.js';
 import { CourseAssignment } from '../models/CourseAssignment.js';
 import { Student } from '../models/Student.js';
 import { User } from '../models/User.js';
+import { Generation } from '../models/Generation.js';
 import bcrypt from 'bcryptjs';
 
 dotenv.config();
@@ -76,8 +77,12 @@ const clearDB = async () => {
         Course.deleteMany({}),
         CourseAssignment.deleteMany({}),
         Student.deleteMany({}),
-        User.deleteMany({})
+        User.deleteMany({}),
+        Generation.deleteMany({})
     ]);
+    
+    console.log('Seeding Generation Baseline...');
+    await Generation.create({ name: 'Fall 2026', status: 'ACTIVE' });
 };
 
 const createProgramsAndStructure = async () => {
@@ -104,6 +109,7 @@ const createProgramsAndStructure = async () => {
                 const strength = faker.number.int({ min: 40, max: 60 });
                 const section = await Section.create({
                     yearId: year._id,
+                    programId: program._id,
                     name: secName,
                     strength: strength
                 });
