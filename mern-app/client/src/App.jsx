@@ -53,7 +53,15 @@ const AdminLayout = ({ children }) => {
 
 // ─── Route Guard & Router ────────────────────────────────────
 const BaseRoutes = () => {
-    const { user } = useAuth();
+    const { user, loading } = useAuth();
+
+    if (loading) {
+        return (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#020617', color: '#e2e8f0' }}>
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div>
+            </div>
+        );
+    }
 
     if (!user) {
         return (

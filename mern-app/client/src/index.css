@@ -197,7 +197,6 @@ h1, h2, h3, h4, h5 { color: var(--on-surface); letter-spacing: -0.02em; }
   box-shadow: var(--shadow-xs);
   transition: all 0.25s cubic-bezier(0.4,0,0.2,1);
 }
-.apple-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--outline-strong); }
 
 .section-panel {
   background: var(--surface-low);
@@ -288,7 +287,6 @@ select.input-field { appearance: none; cursor: pointer; background-image: url("d
   background: var(--surface); border: 1px solid var(--outline);
   border-radius: 12px; padding: 16px 20px; transition: all 0.2s ease;
 }
-.item-card:hover { border-color: var(--outline-strong); box-shadow: var(--shadow-sm); }
 
 .item-avatar {
   width: 40px; height: 40px; border-radius: 50%;
@@ -306,7 +304,6 @@ select.input-field { appearance: none; cursor: pointer; background-image: url("d
   display: flex; flex-direction: column; justify-content: space-between;
   min-height: 96px; transition: all 0.25s ease;
 }
-.room-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
 
 .room-type-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.15em; color: var(--secondary); opacity: 0.6; margin-bottom: 2px; }
 .room-name { font-size: 17px; font-weight: 700; color: var(--on-surface); }
@@ -325,7 +322,6 @@ select.input-field { appearance: none; cursor: pointer; background-image: url("d
 
 /* ─── Stat Cards (Dashboard) ──────────────────────────────── */
 .stat-card { background: var(--surface); border: 1px solid var(--outline); border-radius: 16px; padding: 24px; box-shadow: var(--shadow-xs); transition: all 0.25s ease; }
-.stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
 .stat-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
 .stat-value { font-size: 2rem; font-weight: 700; color: var(--on-surface); letter-spacing: -0.04em; margin: 16px 0 4px; }
 .stat-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--secondary); }
@@ -372,7 +368,6 @@ select.input-field { appearance: none; cursor: pointer; background-image: url("d
 .tt-cell:last-child { border-right: none; }
 .tt-cell:hover { background: rgba(255,255,255,0.8); }
 .tt-cell-inner { background: var(--surface); border-radius: 8px; padding: 6px 10px; height: 100%; box-shadow: var(--shadow-xs); cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; justify-content: center; }
-.tt-cell-inner:hover { box-shadow: var(--shadow-sm); transform: translateY(-1px); }
 .tt-cell-code { font-size: 9px; font-weight: 700; color: var(--primary); text-transform: uppercase; margin-bottom: 2px; }
 .tt-cell-name { font-size: 11px; font-weight: 600; color: var(--on-surface); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tt-cell-meta { font-size: 10px; color: var(--secondary); margin-top: 4px; }

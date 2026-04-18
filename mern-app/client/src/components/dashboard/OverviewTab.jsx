@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Database, School, BookOpen, DoorOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import api from '../../api/client';
 
 const StatCard = ({ icon: Icon, label, value, badge, note, iconBg, iconColor }) => (
     <div className="stat-card">
@@ -30,6 +31,23 @@ const StatCard = ({ icon: Icon, label, value, badge, note, iconBg, iconColor }) 
 
 export const OverviewTab = () => {
     const navigate = useNavigate();
+    const [stats, setStats] = useState({ programs: '—', courses: '—', rooms: '—' });
+
+    useEffect(() => {
+        const fetchStats = async () => {
+            try {
+                const res = await api.get('/stats');
+                setStats({
+                    programs: res.data.programs,
+                    courses: res.data.courses,
+                    rooms: res.data.rooms
+                });
+            } catch (err) {
+                console.error("Failed to load overview stats:", err);
+            }
+        };
+        fetchStats();
+    }, []);
 
     return (
         <div className="animate-in">
@@ -50,27 +68,27 @@ export const OverviewTab = () => {
                 <StatCard
                     icon={School}
                     label="Total Programs"
-                    value="—"
-                    badge="+4%"
-                    note="Configurable once infrastructure is set up"
+                    value={stats.programs}
+                    badge="Active"
+                    note="Manage through Infrastructure"
                     iconBg="var(--primary-bg)"
                     iconColor="var(--primary)"
                 />
                 <StatCard
                     icon={BookOpen}
                     label="Active Courses"
-                    value="—"
+                    value={stats.courses}
                     badge="Steady"
-                    note="Add courses via Infrastructure tab"
+                    note="Curriculum counts"
                     iconBg="rgba(255,149,0,0.08)"
                     iconColor="#ff9500"
                 />
                 <StatCard
                     icon={DoorOpen}
                     label="Physical Rooms"
-                    value="—"
-                    badge="92% Occ."
-                    note="Register rooms in Infrastructure tab"
+                    value={stats.rooms}
+                    badge="Ready"
+                    note="Infrastructure capacity"
                     iconBg="rgba(0,122,255,0.08)"
                     iconColor="#007aff"
                 />

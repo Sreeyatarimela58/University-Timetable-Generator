@@ -137,12 +137,12 @@ export const UsersTab = () => {
                 </div>
 
                 {users.length === 0 ? (
-                    <div className="apple-card" style={{ padding: '48px', textAlign: 'center' }}>
+                    <div className="apple-card no-hover" style={{ padding: '48px', textAlign: 'center' }}>
                         <User size={32} color="var(--secondary)" style={{ margin: '0 auto 12px' }} />
                         <p style={{ color: 'var(--secondary)', fontSize: '14px' }}>No accounts yet. Create the first profile.</p>
                     </div>
                 ) : (
-                    <div className="apple-card" style={{ overflow: 'hidden' }}>
+                    <div className="apple-card no-hover" style={{ overflow: 'hidden' }}>
                         <table className="data-table">
                             <thead>
                                 <tr>

@@ -112,7 +112,7 @@ export const CoursesTab = () => {
 
             <div style={{ maxWidth: '900px', display: 'flex', flexDirection: 'column', gap: '32px' }}>
                 {/* Hierarchy & Identity */}
-                <div className="apple-card" style={{ padding: '28px' }}>
+                <div className="apple-card no-hover" style={{ padding: '28px' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
                         <div className="input-group">
                             <label className="input-label">Program</label>
