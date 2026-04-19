@@ -14,7 +14,8 @@ apply_hard_constraints(Assignments) :-
     apply_teacher_fatigue(Assignments),
     apply_section_fatigue(Assignments),
     apply_daily_load_cap(Assignments),          % Phase 4: max classes/day
-    apply_subject_day_cap(Assignments).         % Phase 5: max 2 same course/day
+    apply_subject_day_cap(Assignments),         % Phase 5: max 2 same course/day
+    apply_slot_spacing(Assignments).            % Phase 6: Slot Spacing
 
 % 1, 2, 3, 4: Clash Constraints Pairwise
 apply_pairwise_clashes([]).
@@ -302,3 +303,33 @@ count_sc_on_day([assign(SecA, CA, _, _, D, _, Status) | Rest], Sec, C, Day, [B |
         B #<==> (Status #= 1 #/\ D #= Day)
     ; B = 0 ),
     count_sc_on_day(Rest, Sec, C, Day, BRest).
+
+% =======================================================================
+% PHASE 6: Slot Spacing
+% Ensures gaps between scheduled slots to prevent front-loaded clustering.
+% Prevents 3+ consecutive slots (allows 2-hour labs, forces gap after).
+% =======================================================================
+apply_slot_spacing(Assignments) :-
+    findall(Sec, solver:section(Sec, _), Secs),
+    apply_spacing_loop(Secs, Assignments).
+
+apply_spacing_loop([], _).
+apply_spacing_loop([Sec|Rest], Assignments) :-
+    apply_spacing_days(Sec, 1, 5, Assignments),
+    apply_spacing_loop(Rest, Assignments).
+
+apply_spacing_days(_, Day, MaxDay, _) :- Day > MaxDay, !.
+apply_spacing_days(Sec, Day, MaxDay, Assignments) :-
+    Day =< MaxDay,
+    get_sec_bool_vars(Assignments, Sec, Day, 1, Bools),
+    enforce_slot_spacing(Bools),
+    NextDay is Day + 1,
+    apply_spacing_days(Sec, NextDay, MaxDay, Assignments).
+
+enforce_slot_spacing([B1, B2, B3, B4, B5, B6, B7, B8]) :-
+    B1 + B2 + B3 #=< 2,
+    B2 + B3 + B4 #=< 2,
+    B3 + B4 + B5 #=< 2,
+    B4 + B5 + B6 #=< 2,
+    B5 + B6 + B7 #=< 2,
+    B6 + B7 + B8 #=< 2.
