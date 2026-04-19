@@ -633,6 +633,24 @@ export const publishDraft = async (req, res) => {
     }
 };
 
+export const updateTimetableName = async (req, res) => {
+    try {
+        const { sectionId, generationId, customName } = req.body;
+        if (!sectionId || !generationId) {
+            return res.status(400).json({ error: 'sectionId and generationId are required for renaming.' });
+        }
+
+        await models.Timetable.updateMany(
+            { sectionId, generationId },
+            { $set: { customName } }
+        );
+
+        res.json({ message: 'Timetable name updated successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
 export const getActiveGeneration = async (req, res) => {
     try {
         const generation = await models.Generation.findOne({ status: 'ACTIVE' });

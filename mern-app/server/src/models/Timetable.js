@@ -60,8 +60,9 @@ const timetableSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
-    archivedAt: {
-        type: Date
+    customName: {
+        type: String,
+        trim: true
     }
 }, { timestamps: true });
 

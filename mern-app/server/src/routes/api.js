@@ -1,6 +1,6 @@
 import express from 'express';
 import { getAll, getById, create, update, remove, getStats } from '../controllers/entityController.js';
-import { generateDrafts, getDraft, publishDraft, getActiveGeneration, getPendingDraftSummary, clearPendingDrafts } from '../controllers/generatorController.js';
+import { generateDrafts, getDraft, publishDraft, getActiveGeneration, getPendingDraftSummary, clearPendingDrafts, updateTimetableName } from '../controllers/generatorController.js';
 import { login } from '../controllers/authController.js';
 import { createUser, listUsers } from '../controllers/userController.js';
 import { protect, requireAdmin } from '../middleware/authMiddleware.js';
@@ -23,6 +23,7 @@ router.delete('/drafts/pending/clear', protect, requireAdmin, clearPendingDrafts
 router.post('/generate-drafts', protect, requireAdmin, generateDrafts);
 router.get('/drafts/:id', protect, requireAdmin, getDraft);
 router.post('/publish/:draftId/:optionIndex', protect, requireAdmin, publishDraft);
+router.put('/timetables/bulk-update-name', protect, requireAdmin, updateTimetableName);
 
 // Stats Endpoint
 router.get('/stats', protect, getStats);
