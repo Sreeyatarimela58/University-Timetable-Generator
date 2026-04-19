@@ -27,9 +27,12 @@ main([File]) :-
         TotalScheduled #=< TotalAssigns, % Upper bound for efficiency
 
         apply_heuristics(Assignments, Score),
-        % DYNAMIC FALLBACK STRATEGY
+
+        % ---------------------------------------------------------------
+        % THREE-TIER FALLBACK STRATEGY + EMERGENCY 4th TIER
+        % ---------------------------------------------------------------
         (
-            % Attempt high-quality maximized schedule
+            % TIER 1: High-quality maximized schedule (3.5s timeout)
             catch(
                 call_with_time_limit(3.5, (
                     MinRequired is TotalAssigns * 7 // 10,
@@ -45,16 +48,40 @@ main([File]) :-
                 )
             )
         ;
-            % Fallback to any valid solution if quality threshold is impossible
+            % TIER 3: Any valid solution — drop quality floor
             writeln(user_error, 'QUALITY_FALLBACK'),
             once(labeling([ffc], Vars)),
             StateStr = "partial"
         ),
 
+        % ---------------------------------------------------------------
+        % PHASE 6: Debug logging — emits placement stats to stderr
+        % ---------------------------------------------------------------
+        ( integer(TotalScheduled) ->
+            format(user_error,
+                '[DEBUG] Scheduled=~w/~w | State=~w~n',
+                [TotalScheduled, TotalAssigns, StateStr])
+        ; format(user_error, '[DEBUG] State=~w | Count still FD var~n', [StateStr])
+        ),
+
+        % ---------------------------------------------------------------
+        % TIER 4 (Emergency Fallback): if 0 classes placed, relax soft
+        % constraints (fatigue + lunch) and re-label once more.
+        % ---------------------------------------------------------------
+        ( TotalScheduled =:= 0 ->
+            writeln(user_error, 'EMERGENCY_RELAXED_CONSTRAINTS'),
+            assertz(relax_fatigue),
+            assertz(relax_lunch),
+            once(labeling([ffc], Vars)),
+            FinalState = "emergency_relaxed"
+        ;
+            FinalState = StateStr
+        ),
+
         % Collect result
-        ( TotalScheduled == 0 -> FinalState = "infeasible" ; FinalState = StateStr ),
+        ( TotalScheduled == 0 -> OverallState = "infeasible" ; OverallState = FinalState ),
         format_all_solutions([Score-Assignments], FormattedSols),
-        Reply = _{ status: "success", solverState: FinalState, solutions: FormattedSols }
+        Reply = _{ status: "success", solverState: OverallState, solutions: FormattedSols }
     ;
         Reply = _{ status: "failure", reason: "domain error", solutions: [] }
     ),

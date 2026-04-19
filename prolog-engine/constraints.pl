@@ -12,7 +12,9 @@ apply_hard_constraints(Assignments) :-
     apply_lab_lunch_rule(Assignments),
     apply_lunch_constraint(Assignments),
     apply_teacher_fatigue(Assignments),
-    apply_section_fatigue(Assignments).
+    apply_section_fatigue(Assignments),
+    apply_daily_load_cap(Assignments),          % Phase 4: max classes/day
+    apply_subject_day_cap(Assignments).         % Phase 5: max 2 same course/day
 
 % 1, 2, 3, 4: Clash Constraints Pairwise
 apply_pairwise_clashes([]).
@@ -238,3 +240,65 @@ get_sec_bool_vars(Assignments, Sec, Day, Slot, [SumB | RestB]) :-
     sum(ListB, #=, SumB),
     NextSlot is Slot + 1,
     get_sec_bool_vars(Assignments, Sec, Day, NextSlot, RestB).
+
+% =======================================================================
+% PHASE 4: Daily Load Cap
+% Ensures no single day gets more than ceil(TotalAssignments / NumDays)
+% active (Status=1) assignments across ALL sections.
+% Formula: MaxPerDay = ceil(Total / 5)
+% =======================================================================
+apply_daily_load_cap(Assignments) :-
+    length(Assignments, Total),
+    ( Total =:= 0 -> true ;
+        MaxPerDay is (Total + 4) // 5,
+        apply_load_cap_days(1, 5, MaxPerDay, Assignments)
+    ).
+
+apply_load_cap_days(Day, MaxDay, _, _) :- Day > MaxDay, !.
+apply_load_cap_days(Day, MaxDay, Max, Assignments) :-
+    Day =< MaxDay,
+    count_active_on_day(Assignments, Day, Bools),
+    sum(Bools, #=, DayCount),
+    DayCount #=< Max,
+    NextDay is Day + 1,
+    apply_load_cap_days(NextDay, MaxDay, Max, Assignments).
+
+count_active_on_day([], _, []).
+count_active_on_day([assign(_, _, _, _, D, _, Status) | Rest], Day, [B | BRest]) :-
+    B in 0..1,
+    B #<==> (Status #= 1 #/\ D #= Day),
+    count_active_on_day(Rest, Day, BRest).
+
+% =======================================================================
+% PHASE 5: Subject/Day Cap
+% Ensures no (section, course) pair is placed more than 2 times
+% on the same day. Prevents subject clustering within a single day.
+% =======================================================================
+apply_subject_day_cap(Assignments) :-
+    findall((Sec, C),
+        (solver:section(Sec, _), solver:section_course(Sec, C)),
+        RawPairs),
+    sort(RawPairs, Pairs),
+    apply_sdc_loop(Pairs, Assignments).
+
+apply_sdc_loop([], _).
+apply_sdc_loop([(Sec, C) | Rest], Assignments) :-
+    apply_sdc_days(Sec, C, 1, 5, Assignments),
+    apply_sdc_loop(Rest, Assignments).
+
+apply_sdc_days(_, _, Day, MaxDay, _) :- Day > MaxDay, !.
+apply_sdc_days(Sec, C, Day, MaxDay, Assignments) :-
+    Day =< MaxDay,
+    count_sc_on_day(Assignments, Sec, C, Day, Bools),
+    sum(Bools, #=, Count),
+    Count #=< 2,   % At most 2 slots of the same course per section per day
+    NextDay is Day + 1,
+    apply_sdc_days(Sec, C, NextDay, MaxDay, Assignments).
+
+count_sc_on_day([], _, _, _, []).
+count_sc_on_day([assign(SecA, CA, _, _, D, _, Status) | Rest], Sec, C, Day, [B | BRest]) :-
+    B in 0..1,
+    ( SecA == Sec, CA == C ->
+        B #<==> (Status #= 1 #/\ D #= Day)
+    ; B = 0 ),
+    count_sc_on_day(Rest, Sec, C, Day, BRest).

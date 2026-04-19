@@ -10,11 +10,13 @@ apply_heuristics(Assignments, Score) :-
     eval_parallel_bonus(Assignments, ParallelBonus),
     eval_compactness_bonus(Assignments, CompactnessBonus),
     eval_cluster_penalty(Assignments, ClusterPenalty),
+    eval_day_balance(Assignments, BalanceBonus),
 
     TotalScore #= BaseScore 
                   + SpreadReward 
                   + ParallelBonus
                   + CompactnessBonus
+                  + BalanceBonus
                   - LatePenalty 
                   - RoomChangePenalty
                   - ClusterPenalty,
@@ -97,7 +99,7 @@ cluster_loop([(Sec,C)|Rest], A, Acc, Total) :-
     length(UniqueDays, UniqueCount),
 
     Cluster is TotalSlots - UniqueCount,
-    NextAcc #= Acc + (Cluster * 20),  % 🔥 strong penalty
+    NextAcc #= Acc + (Cluster * 40),  % 🔥 doubled penalty: was 20, now 40
 
     cluster_loop(Rest, A, NextAcc, Total).
 
@@ -112,7 +114,7 @@ eval_spread_loop([], _, R, R).
 eval_spread_loop([(Sec, C)|Rest], Assignments, Acc, TotalReward) :-
     get_days_active(Assignments, Sec, C, DaysActive),
     sum(DaysActive, #=, UniqueDays),
-    Reward #= UniqueDays * 15, % 🔥 increased
+    Reward #= UniqueDays * 30, % 🔥 doubled reward: was 15, now 30
     NextAcc #= Acc + Reward,
     eval_spread_loop(Rest, Assignments, NextAcc, TotalReward).
 
@@ -201,3 +203,30 @@ max_member(X, [X]).
 max_member(X, [H|T]) :-
     max_member(Y, T),
     (H @>= Y -> X = H ; X = Y).
+
+% =====================================================================
+% DAY BALANCE BONUS (PHASE 3 ADDITION)
+% Rewards schedules where active classes are evenly spread across days.
+% For each day, counts active assignments. Penalises days with 0 classes.
+% =====================================================================
+eval_day_balance(Assignments, Bonus) :-
+    eval_balance_days(1, 5, Assignments, 0, Bonus).
+
+eval_balance_days(Day, MaxDay, _, Acc, Acc) :- Day > MaxDay, !.
+eval_balance_days(Day, MaxDay, Assignments, Acc, Total) :-
+    Day =< MaxDay,
+    count_day_active_total(Assignments, Day, Bools),
+    sum(Bools, #=, DayCount),
+    % Bonus: each day that has at least 1 class earns +25
+    HasClass in 0..1,
+    HasClass #<==> (DayCount #>= 1),
+    DayBonus #= HasClass * 25,
+    NextAcc #= Acc + DayBonus,
+    NextDay is Day + 1,
+    eval_balance_days(NextDay, MaxDay, Assignments, NextAcc, Total).
+
+count_day_active_total([], _, []).
+count_day_active_total([assign(_, _, _, _, D, _, Status) | Rest], Day, [B | BRest]) :-
+    B in 0..1,
+    B #<==> (Status #= 1 #/\ D #= Day),
+    count_day_active_total(Rest, Day, BRest).
