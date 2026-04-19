@@ -93,7 +93,10 @@ const generateSystemFacts = (teachers, rooms, sections, courses, assignments, te
 const activeRequests = new Map();
 
 export const generateDrafts = async (req, res) => {
-    const { programId, yearId } = req.body || {};
+    const { programId, yearId, mode } = req.body || {};
+    if (mode === 'global') {
+        return await generateGlobalDraftsCore(req, res);
+    }
     if (!programId || !yearId) return res.status(400).json({ error: 'programId and yearId are required for target scoping.' });
 
     const generation = await models.Generation.findOne({ status: 'ACTIVE' });
@@ -205,7 +208,9 @@ export const generateDrafts = async (req, res) => {
         totalSessions = assignments.reduce((acc, a) => {
             const course = courses.find(c => c._id.toString() === a.courseId.toString());
             if (!course) return acc;
-            return acc + (course.theorySessions?.length || 0) + (course.labSessions?.length || 0);
+            const tHrs = course.theorySessions?.reduce((sum, h) => sum + h, 0) || 0;
+            const lHrs = course.labSessions?.reduce((sum, h) => sum + h, 0) || 0;
+            return acc + tHrs + lHrs;
         }, 0);
 
         if (totalSessions > totalSlots) throw new Error("INSUFFICIENT ROOM CAPACITY");
@@ -639,5 +644,164 @@ export const clearPendingDrafts = async (req, res) => {
         res.json({ message: 'All pending drafts cleared.' });
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+};
+
+export const generateGlobalDraftsCore = async (req, res) => {
+    const generation = await models.Generation.findOne({ status: 'ACTIVE' });
+    if (!generation) return res.status(400).json({ error: 'No ACTIVE generation cycle found.' });
+    const generationId = generation._id;
+
+    if (isGenerating) return res.status(423).json({ error: 'Generation already in progress.' });
+    
+    const pendingDrafts = await models.DraftTimetable.countDocuments();
+    if (pendingDrafts > 0) return res.status(400).json({ error: 'Please publish or clear pending drafts before generating new scopes.' });
+
+    isGenerating = true;
+
+    try {
+        console.log(`Starting GLOBAL multi-pass generation`);
+        
+        // 1. Find all active Section scopes
+        const groupedSections = await models.Section.aggregate([
+            { $group: { _id: { programId: "$programId", yearId: "$yearId" }, sectionsCount: { $sum: 1 } } },
+            { $sort: { sectionsCount: -1 } } // Step 3: Harder first
+        ]);
+        
+        // Step 2: Global State Tracking
+        const globalState = { 
+            teacherBlockSet: new Set(), 
+            roomBlockSet: new Set() 
+        };
+        
+        let finalTimetable = [];
+        let totalUnscheduled = [];
+        
+        const rooms = await models.Room.find();
+        const courses = await models.Course.find();
+        const teachers = await models.Teacher.find();
+
+        for (const target of groupedSections) {
+            const { programId, yearId } = target._id;
+            const sections = await models.Section.find({ programId, yearId });
+            const sectionIds = sections.map(s => s._id);
+            let assignments = await models.CourseAssignment.find({ sectionId: { $in: sectionIds }});
+            
+            if (!sections.length || !assignments.length) continue;
+
+            const teacherIdsSet = new Set();
+            assignments.forEach(a => {
+                 if (a.theoryTeacherIds) a.theoryTeacherIds.forEach(t => teacherIdsSet.add(t.toString()));
+                 if (a.labTeacherIds) a.labTeacherIds.forEach(t => teacherIdsSet.add(t.toString()));
+            });
+            const teacherIdsArr = Array.from(teacherIdsSet);
+            const targetTeachers = teachers.filter(t => teacherIdsArr.includes(t._id.toString()));
+
+            // Step 8: Safety Check
+            const totalSessions = assignments.reduce((acc, a) => {
+                const course = courses.find(c => c._id.toString() === a.courseId.toString());
+                if (!course) return acc;
+                const tHrs = course.theorySessions?.reduce((sum, h) => sum + h, 0) || 0;
+                const lHrs = course.labSessions?.reduce((sum, h) => sum + h, 0) || 0;
+                return acc + tHrs + lHrs;
+            }, 0);
+            
+            const capacity = rooms.length * DAYS_LENGTH * SLOTS_LENGTH;
+            const utilization = totalSessions / capacity;
+            if (utilization > 0.85) console.warn("High Resource Utilization Warning: Check solver load");
+            
+            // Step 5: Assign Teachers with balancing - ensuring pool is ordered properly by availability
+            const availabilityScore = (tid) => {
+                let blocked = 0;
+                globalState.teacherBlockSet.forEach(b => { if (b.startsWith(tid)) blocked++; });
+                const teacher = targetTeachers.find(t => t._id.toString() === tid);
+                if (teacher && teacher.unavailableSlots) blocked += teacher.unavailableSlots.length;
+                return blocked;
+            };
+
+            assignments.forEach(a => {
+                if (a.theoryTeacherIds) a.theoryTeacherIds.sort((t1, t2) => availabilityScore(t1.toString()) - availabilityScore(t2.toString()));
+                if (a.labTeacherIds) a.labTeacherIds.sort((t1, t2) => availabilityScore(t1.toString()) - availabilityScore(t2.toString()));
+            });
+            
+            assignments = faker.helpers.shuffle(assignments);
+
+            // Step 4: Light Room Partitioning (we pass full set, Prolog native tracking handles boundaries dynamically)
+            const facts = generateSystemFacts(targetTeachers, rooms, sections, courses, assignments, globalState.teacherBlockSet, globalState.roomBlockSet);
+
+            const engineResponse = await executePrologSolver(facts);
+            
+            if (engineResponse && engineResponse.drafts && engineResponse.drafts.length > 0) {
+                const draft = engineResponse.drafts[0];
+                
+                let localUnscheduledCount = 0;
+                
+                // Map the output
+                draft.timetable.forEach(entry => {
+                    const parts = entry.courseId.split('_');
+                    const cid = parts[1];
+                    const componentCode = parts[2];
+                    
+                    const course = courses.find(c => c._id.toString() === cid);
+                    const teacher = targetTeachers.find(t => t._id.toString() === (entry.teacherId === 'none' ? '' : entry.teacherId.replace('id_', '')));
+                    const section = sections.find(s => s._id.toString() === entry.sectionId.replace('id_', ''));
+                    const room    = rooms.find(r => r._id.toString() === (entry.roomId === 'none' ? '' : entry.roomId.replace('id_', '')));
+
+                    const mappedEntry = {
+                        sectionId: entry.sectionId.replace('id_', ''), sectionName: section?.name || 'Unknown',
+                        programId, yearId,
+                        courseId: cid, courseName: course?.name || 'Unknown',
+                        teacherId: entry.teacherId === 'none' ? null : entry.teacherId.replace('id_', ''), teacherName: entry.teacherId === 'none' ? 'None' : (teacher?.name || 'Unknown'),
+                        roomId: entry.roomId === 'none' ? null : entry.roomId.replace('id_', ''), roomName: entry.roomId === 'none' ? 'None' : (room?.name || 'Unknown'),
+                        day: entry.day, slot: entry.slot, component: componentCode === 'T' ? 'theory' : 'lab',
+                        status: entry.status ?? 1
+                    };
+
+                    if (mappedEntry.status === 1) {
+                        finalTimetable.push(mappedEntry);
+                        // Step 7: Update global state tracking for overlaps efficiently
+                        if (mappedEntry.teacherId) globalState.teacherBlockSet.add(`${mappedEntry.teacherId}-${mappedEntry.day}-${mappedEntry.slot}`);
+                        if (mappedEntry.roomId) globalState.roomBlockSet.add(`${mappedEntry.roomId}-${mappedEntry.day}-${mappedEntry.slot}`);
+                    } else {
+                        localUnscheduledCount++;
+                        totalUnscheduled.push(mappedEntry);
+                    }
+                });
+                
+                if (localUnscheduledCount > 0) {
+                    console.warn(`Partial schedule for ${programId}-${yearId}`);
+                }
+            } else {
+                throw new Error(`Solver failed to produce a valid run for subset Program: ${programId}, Year: ${yearId}`);
+            }
+        }
+        
+        // Final Draft Compilation merged properly
+        const cleanDrafts = [{
+            status: totalUnscheduled.length > 0 ? 'partial' : 'success',
+            solverState: totalUnscheduled.length > 0 ? 'partial' : 'optimal',
+            scheduled: finalTimetable,
+            unscheduled: totalUnscheduled,
+            summary: { 
+                total: finalTimetable.length + totalUnscheduled.length, 
+                scheduled: finalTimetable.length, 
+                unscheduled: totalUnscheduled.length, 
+                qualityScore: (finalTimetable.length) / (finalTimetable.length + totalUnscheduled.length || 1), 
+                confidence: 1, trustScore: 1 
+            },
+            analytics: { failureSummary: {}, bottleneckContext: { affectedSections: [], topAffectedCourses: [] } },
+            systemHealth: { status: totalUnscheduled.length > 0 ? 'strained' : 'healthy', reason: 'Global pass completed' },
+            meta: { runId: crypto.randomUUID(), generationId, stabilityPending: false, solverTimeMs: 0 },
+            timetable: finalTimetable
+        }];
+
+        const draftDoc = await models.DraftTimetable.create({ drafts: cleanDrafts, createdBy: req.user?._id });
+        res.json({ draftId: draftDoc._id });
+
+    } catch (err) {
+        console.error('Global Generator Error:', err);
+        res.status(500).json({ error: err.message });
+    } finally {
+        isGenerating = false;
     }
 };
