@@ -454,7 +454,9 @@ export const generateDrafts = async (req, res) => {
                 solverState: solverState, scheduled, unscheduled,
                 summary: { total, scheduled: scheduledCount, unscheduled: unscheduledCount, qualityScore, weightedScore, penaltyScore, confidence, trustScore },
                 analytics: {
-                    solverMode, constraintSaturation, slotSpreadScore, teacherBlockDensity, roomBlockDensity,
+                    solverMode, constraintSaturation, 
+                    spaceUtilization: totalSlots > 0 ? (scheduledCount / totalSlots) : 0,
+                    slotSpreadScore, teacherBlockDensity, roomBlockDensity,
                     failureSummary, topBottleneck, bottleneckImpact,
                     bottleneckContext: { affectedSections: Array.from(affectedSectionSet), topAffectedCourses },
                     stabilityScore: 0,
@@ -578,6 +580,7 @@ export const getDraft = async (req, res) => {
 export const publishDraft = async (req, res) => {
     try {
         const { draftId, optionIndex } = req.params;
+        const { sectionId } = req.body;
         const generation = await models.Generation.findOneAndUpdate(
             { status: 'ACTIVE' },
             { status: 'LOCKED' },
@@ -593,22 +596,37 @@ export const publishDraft = async (req, res) => {
 
         try {
             const chosen = draftDoc.drafts[parseInt(optionIndex, 10)];
-            const sampleEntry = chosen.timetable[0];
-            if (sampleEntry && sampleEntry.programId && sampleEntry.yearId) {
-                 await models.Timetable.deleteMany({ programId: sampleEntry.programId, yearId: sampleEntry.yearId, generationId: generation._id });
+            if (sectionId) {
+                const sectionTimetable = chosen.timetable.filter(t => t.sectionId.toString() === sectionId.toString());
+                if (sectionTimetable.length > 0) {
+                     await models.Timetable.deleteMany({ sectionId: sectionId, generationId: generation._id });
+                     await models.Timetable.insertMany(sectionTimetable.map(t => ({
+                         sectionId: t.sectionId, programId: t.programId, yearId: t.yearId, courseId: t.courseId,
+                         teacherId: t.teacherId, roomId: t.roomId, generationId: generation._id,
+                         day: t.day, slot: t.slot, component: t.component
+                     })));
+                } else {
+                     await models.Generation.updateOne({ _id: generation._id }, { $set: { status: 'ACTIVE' } });
+                     return res.status(400).json({ error: 'No timetable data found for this section in the draft.' });
+                }
+            } else {
+                const sampleEntry = chosen.timetable[0];
+                if (sampleEntry && sampleEntry.programId && sampleEntry.yearId) {
+                     await models.Timetable.deleteMany({ programId: sampleEntry.programId, yearId: sampleEntry.yearId, generationId: generation._id });
+                }
+
+                await models.Timetable.insertMany(chosen.timetable.map(t => ({
+                    sectionId: t.sectionId, programId: t.programId, yearId: t.yearId, courseId: t.courseId,
+                    teacherId: t.teacherId, roomId: t.roomId, generationId: generation._id,
+                    day: t.day, slot: t.slot, component: t.component
+                })));
+
+                await models.DraftTimetable.findByIdAndDelete(draftId);
             }
-
-            await models.Timetable.insertMany(chosen.timetable.map(t => ({
-                sectionId: t.sectionId, programId: t.programId, yearId: t.yearId, courseId: t.courseId,
-                teacherId: t.teacherId, roomId: t.roomId, generationId: generation._id,
-                day: t.day, slot: t.slot, component: t.component
-            })));
-
-            await models.DraftTimetable.findByIdAndDelete(draftId);
         } finally {
             await models.Generation.updateOne({ _id: generation._id }, { $set: { status: 'ACTIVE' } });
         }
-        res.json({ message: 'Published successfully' });
+        res.json({ message: sectionId ? 'Section timetable published successfully!' : 'Published successfully' });
     } catch (err) {
         if (err.message.includes('No ACTIVE')) res.status(400);
         res.status(500).json({ error: err.message });

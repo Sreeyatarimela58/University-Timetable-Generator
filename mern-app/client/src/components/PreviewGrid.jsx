@@ -73,8 +73,11 @@ const SectionGrid = ({ timetable = [] }) => {
     );
 };
 
-export const PreviewGrid = ({ timetable = [], title = 'Draft Preview' }) => {
-    const [activeSectionId, setActiveSectionId] = useState(null);
+export const PreviewGrid = ({ timetable = [], title = 'Draft Preview', activeSectionId: externalSectionId, setActiveSectionId: setExternalSectionId }) => {
+    const [internalSectionId, setInternalSectionId] = useState(null);
+
+    const activeSectionId = externalSectionId !== undefined ? externalSectionId : internalSectionId;
+    const setActiveSectionId = setExternalSectionId || setInternalSectionId;
 
     const groupedBySection = useMemo(() => {
         return timetable.reduce((acc, entry) => {

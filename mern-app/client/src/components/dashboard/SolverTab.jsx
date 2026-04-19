@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import api from '../../api/client';
 import { PreviewGrid } from '../PreviewGrid';
 import './SolverTab.css'; // Import the new custom CSS module
@@ -60,9 +60,9 @@ const AnalyticsPanel = ({ draft, onPublish, index }) => {
                     </div>
                     <div className="st-stat-box">
                         <span className="st-stat-label">Space Util.</span>
-                        <div className="st-stat-val">{percent(analytics?.constraintSaturation || 0)}</div>
+                        <div className="st-stat-val">{percent(analytics?.spaceUtilization || 0)}</div>
                         <div className="st-stat-bar-bg">
-                            <div className="st-stat-bar-fill" style={{ width: percent(analytics?.constraintSaturation || 0) }}></div>
+                            <div className="st-stat-bar-fill" style={{ width: percent(analytics?.spaceUtilization || 0) }}></div>
                         </div>
                     </div>
                 </div>
@@ -131,6 +131,10 @@ export const SolverTab = () => {
     const [targetYear, setTargetYear] = useState('');
     const [activeGeneration, setActiveGeneration] = useState(null);
     const [pendingDraftState, setPendingDraftState] = useState(null);
+    const [mode, setMode] = useState("isolated");
+    const [viewProgram, setViewProgram] = useState('');
+    const [viewYear, setViewYear] = useState('');
+    const [activeSectionId, setActiveSectionId] = useState(undefined);
 
     // Filter years to only those belonging to the selected program
     const filteredYears = targetProgram
@@ -193,7 +197,7 @@ export const SolverTab = () => {
     };
 
     const handleGenerate = async () => {
-        if (!targetProgram || !targetYear) {
+        if (mode === "isolated" && (!targetProgram || !targetYear)) {
             setError('Select a target bounding scope.');
             return;
         }
@@ -207,33 +211,13 @@ export const SolverTab = () => {
         setPublishMsg('');
         setPublished(false);
         try {
-            const res = await api.post('/generate-drafts', { programId: targetProgram, yearId: targetYear });
+            const payload = mode === "global" ? { mode: "global" } : { programId: targetProgram, yearId: targetYear };
+            const res = await api.post('/generate-drafts', payload);
             const id = res.data.draftId;
             setDraftId(id);
             const draftRes = await api.get(`/drafts/${id}`);
             
             let loadedDrafts = draftRes.data.drafts || [];
-            
-            if (loadedDrafts.length === 1) {
-                const base = loadedDrafts[0];
-                loadedDrafts = [
-                    base,
-                    { 
-                        ...base, 
-                        summary: { ...base.summary, confidence: Math.max(0, base.summary.confidence - 0.08) },
-                        analytics: { ...base.analytics, constraintSaturation: 0.8 },
-                        meta: { ...base.meta, stabilityPending: false }
-                    },
-                    { 
-                        ...base,
-                        summary: { ...base.summary, confidence: Math.max(0, base.summary.confidence - 0.15) },
-                        analytics: { ...base.analytics, constraintSaturation: 0.5 },
-                        systemHealth: { status: 'strained', reason: 'High node variability' },
-                        meta: { ...base.meta, stabilityPending: false }
-                    }
-                ];
-            }
-
             setDrafts(loadedDrafts);
             if (loadedDrafts.length > 0) {
                setSelectedDraft(loadedDrafts[0]);
@@ -268,13 +252,11 @@ export const SolverTab = () => {
         if (!selectedDraft || !draftId) return;
         setPublishMsg('');
         try {
-            const res = await api.post(`/publish/${draftId}/0`); 
-            setPublishMsg(res.data.message || 'Timetable published successfully!');
+            const payload = activeSectionId ? { sectionId: activeSectionId } : {};
+            const res = await api.post(`/publish/${draftId}/0`, payload); 
+            setPublishMsg(res.data.message || 'Section timetable published successfully!');
             setPublished(true);
-            setDrafts([]);
-            setDraftId(null);
-            setSelectedDraft(null);
-            setPendingDraftState({ hasPending: false });
+            // Do not clear drafts here so the user can publish other sections if they want.
         } catch (err) {
             setPublishMsg(err.response?.data?.error || 'Publish failed.');
         }
@@ -285,6 +267,52 @@ export const SolverTab = () => {
     const isPendingDrafts = !drafts.length && !generating && pendingDraftState?.hasPending;
     const isComputing = generating && !drafts.length;
     const isResult = drafts.length > 0 && selectedDraft;
+
+    // Grouping & Mapping Logic
+    const programMap = useMemo(() => {
+        const map = {};
+        programs.forEach(p => map[p._id] = p.name);
+        return map;
+    }, [programs]);
+
+    const yearMap = useMemo(() => {
+        const map = {};
+        years.forEach(y => map[y._id] = y.yearNumber);
+        return map;
+    }, [years]);
+
+    const groupedData = useMemo(() => {
+        if (!selectedDraft?.timetable) return {};
+        const grouped = {};
+        selectedDraft.timetable.forEach(item => {
+            const { programId, yearId, sectionId, sectionName } = item;
+            if (!grouped[programId]) grouped[programId] = {};
+            if (!grouped[programId][yearId]) grouped[programId][yearId] = {};
+            if (!grouped[programId][yearId][sectionId]) {
+                grouped[programId][yearId][sectionId] = { sectionName, entries: [] };
+            }
+            grouped[programId][yearId][sectionId].entries.push(item);
+        });
+        return grouped;
+    }, [selectedDraft]);
+
+    useEffect(() => {
+        const progIds = Object.keys(groupedData);
+        if (progIds.length > 0 && (!viewProgram || !groupedData[viewProgram])) {
+            setViewProgram(progIds[0]);
+        }
+    }, [groupedData, viewProgram]);
+
+    useEffect(() => {
+        if (viewProgram && groupedData[viewProgram]) {
+            const yearIds = Object.keys(groupedData[viewProgram]);
+            if (yearIds.length > 0 && (!viewYear || !groupedData[viewProgram][viewYear])) {
+                setViewYear(yearIds[0]);
+            }
+        }
+    }, [groupedData, viewProgram, viewYear]);
+
+
 
     return (
         <div className="st-layout">
@@ -323,8 +351,13 @@ export const SolverTab = () => {
                 </div>
 
                 <div className="st-controls">
+                    <div style={{ marginRight: "12px", display: "flex", alignItems: "center" }}>
+                        <button onClick={() => setMode("isolated")} style={{ background: mode === "isolated" ? "#333" : "#ccc", color: "#fff", marginRight: "4px", border: "none", padding: "6px 12px", borderRadius: "12px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}>Isolated</button>
+                        <button onClick={() => setMode("global")} style={{ background: mode === "global" ? "#333" : "#ccc", color: "#fff", border: "none", padding: "6px 12px", borderRadius: "12px", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}>Global</button>
+                    </div>
+
                     <div className="st-select-wrapper">
-                        <select className="st-select" value={targetProgram} onChange={e => {
+                        <select className="st-select" value={targetProgram} disabled={mode === "global"} onChange={e => {
                             setTargetProgram(e.target.value);
                             setTargetYear(''); // reset year when program changes
                         }}>
@@ -334,7 +367,7 @@ export const SolverTab = () => {
                         <span className="st-select-arrow">▾</span>
                     </div>
                     <div className="st-select-wrapper">
-                        <select className="st-select" value={targetYear} onChange={e => setTargetYear(e.target.value)} disabled={!targetProgram}>
+                        <select className="st-select" value={targetYear} onChange={e => setTargetYear(e.target.value)} disabled={!targetProgram || mode === "global"}>
                             <option value="" disabled>Select Year</option>
                             {filteredYears.map(y => <option key={y._id} value={y._id}>{y.yearNumber} Year</option>)}
                         </select>
@@ -343,7 +376,7 @@ export const SolverTab = () => {
 
                     <button 
                         onClick={handleGenerate} 
-                        disabled={generating || !targetProgram || !targetYear}
+                        disabled={generating || (mode === "isolated" && (!targetProgram || !targetYear))}
                         className="st-btn st-btn-primary"
                         style={{ padding: '8px 16px', fontSize: '12px' }}
                     >
@@ -380,11 +413,13 @@ export const SolverTab = () => {
                         </div>
                         <h2 className="st-center-title">Awaiting Directive</h2>
                         <p className="st-center-desc">
+                            Mode: {mode === "global" ? "Global (All Programs)" : "Isolated"}
+                            <br/><br/>
                             Matrix primed for execution. Activate solver to resolve scheduling parameters.
                         </p>
                         <div className="st-btn-group">
                             <button 
-                                onClick={handleGenerate} disabled={!targetProgram || !targetYear}
+                                onClick={handleGenerate} disabled={mode === "isolated" && (!targetProgram || !targetYear)}
                                 className="st-btn st-btn-primary"
                             >
                                 <span className="material-symbols-outlined">auto_fix_high</span>
@@ -462,33 +497,34 @@ export const SolverTab = () => {
             {isResult && (
                 <div className="st-viewer-layout">
                     <div className="st-content">
-                        <div className="st-main-canvas">
-                            <PreviewGrid timetable={selectedDraft.timetable} title="Timetable" />
+                        <div className="st-main-canvas" style={{ overflowY: 'auto' }}>
+                            <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', paddingBottom: '16px', borderBottom: '1px solid var(--st-outline)' }}>
+                                <div className="st-select-wrapper">
+                                    <select value={viewProgram} onChange={e => { setViewProgram(e.target.value); setViewYear(''); }} className="st-select" style={{ minWidth: '150px' }}>
+                                        <option value="" disabled>Select Program</option>
+                                        {Object.keys(groupedData).map(pid => <option key={pid} value={pid}>{programMap[pid] || pid}</option>)}
+                                    </select>
+                                    <span className="st-select-arrow">▾</span>
+                                </div>
+                                <div className="st-select-wrapper">
+                                    <select value={viewYear} onChange={e => { setViewYear(e.target.value); }} className="st-select" disabled={!viewProgram} style={{ minWidth: '120px' }}>
+                                        <option value="" disabled>Select Year</option>
+                                        {viewProgram && Object.keys(groupedData[viewProgram] || {}).map(yid => <option key={yid} value={yid}>Year {yearMap[yid] || yid}</option>)}
+                                    </select>
+                                    <span className="st-select-arrow">▾</span>
+                                </div>
+                            </div>
+
+                            {viewProgram && viewYear && groupedData[viewProgram]?.[viewYear] && (
+                                <PreviewGrid 
+                                    timetable={Object.values(groupedData[viewProgram][viewYear]).reduce((acc, sec) => acc.concat(sec.entries), [])} 
+                                    title={`${programMap[viewProgram] || viewProgram} - Year ${yearMap[viewYear] || viewYear}`} 
+                                    activeSectionId={activeSectionId}
+                                    setActiveSectionId={setActiveSectionId}
+                                />
+                            )}
                         </div>
                         <AnalyticsPanel draft={selectedDraft} index={selectedIndex} onPublish={handlePublish} />
-                    </div>
-
-                    <div className="st-tray">
-                        <div className="st-tray-box">
-                            <div className="st-tray-header">
-                                <h2 className="st-tray-title">Alternatives Map</h2>
-                                <span className="st-health-pill">{drafts.length} Found</span>
-                            </div>
-                            <div className="st-tray-track">
-                                {drafts.map((draft, i) => (
-                                    <OptionCard 
-                                        key={i} 
-                                        draft={draft} 
-                                        index={i} 
-                                        isSelected={i === selectedIndex} 
-                                        onSelect={(d, idx) => {
-                                            setSelectedDraft(d);
-                                            setSelectedIndex(idx);
-                                        }} 
-                                    />
-                                ))}
-                            </div>
-                        </div>
                     </div>
                 </div>
             )}
