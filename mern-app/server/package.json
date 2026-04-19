@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "seed": "node src/seeds/seedUniversity.js"
+    "seed": "node src/seeds/seedProduction.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

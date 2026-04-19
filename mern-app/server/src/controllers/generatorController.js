@@ -205,6 +205,16 @@ export const generateDrafts = async (req, res) => {
         // -------------------------------------
 
         totalSlots = rooms.length * maxRoomSlots;
+        const totalPublishedCount = await models.Timetable.countDocuments({ generationId });
+        // Calculate published entries that are OUTSIDE our current scope (to avoid double counting)
+        const externalPublishedCount = await models.Timetable.countDocuments({ 
+            generationId,
+            $or: [
+                { programId: { $ne: programId } },
+                { yearId: { $ne: yearId } }
+            ]
+        });
+
         totalSessions = assignments.reduce((acc, a) => {
             const course = courses.find(c => c._id.toString() === a.courseId.toString());
             if (!course) return acc;
@@ -455,7 +465,7 @@ export const generateDrafts = async (req, res) => {
                 summary: { total, scheduled: scheduledCount, unscheduled: unscheduledCount, qualityScore, weightedScore, penaltyScore, confidence, trustScore },
                 analytics: {
                     solverMode, constraintSaturation, 
-                    spaceUtilization: totalSlots > 0 ? (scheduledCount / totalSlots) : 0,
+                    spaceUtilization: totalSlots > 0 ? ((scheduledCount + externalPublishedCount) / totalSlots) : 0,
                     slotSpreadScore, teacherBlockDensity, roomBlockDensity,
                     failureSummary, topBottleneck, bottleneckImpact,
                     bottleneckContext: { affectedSections: Array.from(affectedSectionSet), topAffectedCourses },
@@ -825,7 +835,11 @@ export const generateGlobalDraftsCore = async (req, res) => {
                 qualityScore: (finalTimetable.length) / (finalTimetable.length + totalUnscheduled.length || 1), 
                 confidence: 1, trustScore: 1 
             },
-            analytics: { failureSummary: {}, bottleneckContext: { affectedSections: [], topAffectedCourses: [] } },
+            analytics: { 
+                failureSummary: {}, 
+                spaceUtilization: (rooms.length * 5 * 8) > 0 ? (finalTimetable.length / (rooms.length * 5 * 8)) : 0,
+                bottleneckContext: { affectedSections: [], topAffectedCourses: [] } 
+            },
             systemHealth: { status: totalUnscheduled.length > 0 ? 'strained' : 'healthy', reason: 'Global pass completed' },
             meta: { runId: crypto.randomUUID(), generationId, stabilityPending: false, solverTimeMs: 0 },
             timetable: finalTimetable
