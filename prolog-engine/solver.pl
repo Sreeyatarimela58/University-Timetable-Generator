@@ -37,20 +37,20 @@ main([File]) :-
                 call_with_time_limit(3.5, (
                     MinRequired is TotalAssigns * 7 // 10,
                     TotalScheduled #>= MinRequired,
-                    labeling([max(TotalScheduled), ffc, bisect, down], Vars),
+                    labeling([max(TotalScheduled), ffc, bisect], Vars),
                     StateStr = "optimal"
                 )),
                 time_limit_exceeded,
                 (
                     writeln(user_error, 'TIMEOUT_RECOVERY'), 
-                    once(labeling([ffc, bisect, down], Vars)),
+                    once(labeling([ffc, bisect], Vars)),
                     StateStr = "timeout_recovery"
                 )
             )
         ;
             % TIER 3: Any valid solution — drop quality floor
             writeln(user_error, 'QUALITY_FALLBACK'),
-            once(labeling([ffc], Vars)),
+            once(labeling([ffc, bisect], Vars)),
             StateStr = "partial"
         ),
 
@@ -72,7 +72,7 @@ main([File]) :-
             writeln(user_error, 'EMERGENCY_RELAXED_CONSTRAINTS'),
             assertz(relax_fatigue),
             assertz(relax_lunch),
-            once(labeling([ffc], Vars)),
+            once(labeling([ffc, bisect], Vars)),
             FinalState = "emergency_relaxed"
         ;
             FinalState = StateStr
