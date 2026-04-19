@@ -336,6 +336,13 @@
 .st-btn-error:hover {
   background-color: rgba(186,26,26,0.05);
 }
+.st-btn-success {
+  background-color: var(--st-primary-fixed);
+  color: var(--st-on-primary-fixed);
+  border: 1px solid rgba(0, 88, 188, 0.2);
+  cursor: default;
+}
+
 
 /* Computing View Additions */
 .st-loading-bg {

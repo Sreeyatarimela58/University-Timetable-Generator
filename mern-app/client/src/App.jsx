@@ -9,7 +9,6 @@ import Sidebar from './components/Sidebar';
 
 
 // Dashboard Tabs
-import { OverviewTab }       from './components/dashboard/OverviewTab';
 import { InfrastructureTab } from './components/dashboard/InfrastructureTab';
 import { CoursesTab }        from './components/dashboard/CoursesTab';
 import { UsersTab }           from './components/dashboard/UsersTab';
@@ -27,7 +26,6 @@ const AdminLayout = ({ children }) => {
 
     // Mapping titles to paths for the TopHeader
     const titles = {
-        '/admin/overview':       'Administrative Intelligence',
         '/admin/infrastructure': 'Infrastructure Management',
         '/admin/courses':        'Curriculum Architecture',
         '/admin/users':          'Faculty & Student Directory',
@@ -79,9 +77,8 @@ const BaseRoutes = () => {
             <Routes>
                 {user.role === 'admin' && (
                     <Route path="/admin" element={<Dashboard />}>
-                        {/* Redirection from /admin to /admin/overview */}
-                        <Route index element={<Navigate to="/admin/overview" replace />} />
-                        <Route path="overview"       element={<OverviewTab />} />
+                        {/* Redirection from /admin to /admin/infrastructure */}
+                        <Route index element={<Navigate to="/admin/infrastructure" replace />} />
                         <Route path="infrastructure" element={<InfrastructureTab />} />
                         <Route path="courses"        element={<CoursesTab />} />
                         <Route path="users"          element={<UsersTab />} />
@@ -93,7 +90,7 @@ const BaseRoutes = () => {
                 <Route path="/timetable" element={<TimetableGrid />} />
                 
                 {/* Fallback routing */}
-                <Route path="/"    element={<Navigate to={user.role === 'admin' ? '/admin/overview' : '/timetable'} replace />} />
+                <Route path="/"    element={<Navigate to={user.role === 'admin' ? '/admin/infrastructure' : '/timetable'} replace />} />
                 <Route path="*"    element={<Navigate to="/" replace />} />
             </Routes>
         </AdminLayout>

@@ -4,7 +4,6 @@ import { LayoutGrid, Building2, BookOpen, Users, Archive, HelpCircle, LogOut, Za
 import { useAuth } from '../context/AuthContext';
 
 const navItems = [
-    { icon: LayoutGrid,  label: 'Overview',          path: '/admin/overview' },
     { icon: Building2,   label: 'Infrastructure',    path: '/admin/infrastructure' },
     { icon: BookOpen,    label: 'Courses',           path: '/admin/courses' },
     { icon: Users,       label: 'Faculty & Students',path: '/admin/users' },

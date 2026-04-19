@@ -1,13 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import api from '../../api/client';
 import { Plus, Trash2, Link, Users, BookOpen } from 'lucide-react';
 
 export const AssignmentsTab = () => {
+    const { programs, years } = useOutletContext();
+    
     const [teachers,    setTeachers]    = useState([]);
     const [sections,    setSections]    = useState([]);
     const [courses,     setCourses]     = useState([]);
     const [assignments, setAssignments] = useState([]);
     const [msg,         setMsg]         = useState({ text: '', isError: false });
+
+    // Filtering State
+    const [filterProgramId, setFilterProgramId] = useState('');
+    const [filterYearId,    setFilterYearId]    = useState('');
 
     const [aForm, setAForm] = useState({
         sectionId: '',
@@ -15,6 +22,10 @@ export const AssignmentsTab = () => {
         theoryTeacherIds: [],
         labTeacherIds: [],
     });
+
+    const [currentPage, setCurrentPage] = useState(1);
+    const [jumpPage, setJumpPage] = useState(1);
+    const ITEMS_PER_PAGE = 10;
 
     const load = async () => {
         try {
@@ -28,6 +39,48 @@ export const AssignmentsTab = () => {
     };
 
     useEffect(() => { load(); }, []);
+
+    // Derived Filtering Logic
+    const filteredYears = useMemo(() => {
+        if (!filterProgramId) return [];
+        return years.filter(y => (y.programId === filterProgramId || y.programId?._id === filterProgramId))
+                   .sort((a, b) => (Number(a.yearNumber) || 0) - (Number(b.yearNumber) || 0));
+    }, [years, filterProgramId]);
+
+    const filteredSections = useMemo(() => {
+        if (!filterYearId) return [];
+        return sections.filter(s => (s.yearId === filterYearId || s.yearId?._id === filterYearId));
+    }, [sections, filterYearId]);
+
+    const filteredCourses = useMemo(() => {
+        if (!filterYearId) return [];
+        return courses.filter(c => (c.yearId === filterYearId || c.yearId?._id === filterYearId));
+    }, [courses, filterYearId]);
+
+    // Pagination Logic
+    const totalPages = Math.ceil(assignments.length / ITEMS_PER_PAGE);
+    const displayedAssignments = assignments.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+    useEffect(() => {
+        if (currentPage > totalPages && totalPages > 0) {
+            setCurrentPage(totalPages);
+        }
+    }, [assignments.length, totalPages, currentPage]);
+
+    useEffect(() => {
+        setJumpPage(currentPage);
+    }, [currentPage]);
+
+    const handleJump = (e) => {
+        if (e.key === 'Enter' || e.type === 'blur') {
+            const val = Number(jumpPage);
+            if (!isNaN(val) && val >= 1 && val <= totalPages) {
+                setCurrentPage(val);
+            } else {
+                setJumpPage(currentPage);
+            }
+        }
+    };
 
     const showMsg = (text, isError = false) => {
         setMsg({ text, isError });
@@ -79,23 +132,53 @@ export const AssignmentsTab = () => {
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px' }}>
                     
-                    {/* Card 1: Details */}
-                    <div className="apple-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                    {/* Card 1: Hierarchy & Target */}
+                    <div className="apple-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div className="input-group">
+                            <label className="input-label">Program</label>
+                            <select className="input-field" value={filterProgramId}
+                                onChange={e => {
+                                    setFilterProgramId(e.target.value);
+                                    setFilterYearId('');
+                                    setAForm(prev => ({ ...prev, sectionId: '', courseId: '' }));
+                                }}>
+                                <option value="">— Select Program —</option>
+                                {programs.map(p => <option key={p._id} value={p._id}>{p.name.toUpperCase()}</option>)}
+                            </select>
+                        </div>
+
+                        <div className="input-group">
+                            <label className="input-label">Academic Year</label>
+                            <select className="input-field" value={filterYearId}
+                                onChange={e => {
+                                    setFilterYearId(e.target.value);
+                                    setAForm(prev => ({ ...prev, sectionId: '', courseId: '' }));
+                                }}
+                                disabled={!filterProgramId}>
+                                <option value="">— Select Year —</option>
+                                {filteredYears.map(y => <option key={y._id} value={y._id}>{y.yearNumber} Year</option>)}
+                            </select>
+                        </div>
+
+                        <div style={{ height: '1px', background: 'var(--outline)', margin: '4px 0' }}></div>
+
                         <div className="input-group">
                             <label className="input-label">Target Section</label>
                             <select className="input-field" value={aForm.sectionId}
-                                onChange={e => setAForm({ ...aForm, sectionId: e.target.value })}>
+                                onChange={e => setAForm({ ...aForm, sectionId: e.target.value })}
+                                disabled={!filterYearId}>
                                 <option value="">— Select Section —</option>
-                                {sections.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+                                {filteredSections.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
                             </select>
                         </div>
 
                         <div className="input-group">
                             <label className="input-label">Course</label>
                             <select className="input-field" value={aForm.courseId}
-                                onChange={e => setAForm({ ...aForm, courseId: e.target.value, theoryTeacherIds: [], labTeacherIds: [] })}>
+                                onChange={e => setAForm({ ...aForm, courseId: e.target.value, theoryTeacherIds: [], labTeacherIds: [] })}
+                                disabled={!filterYearId}>
                                 <option value="">— Select Course —</option>
-                                {courses.map(c => <option key={c._id} value={c._id}>{c.name} ({c.code})</option>)}
+                                {filteredCourses.map(c => <option key={c._id} value={c._id}>{c.name} ({c.code})</option>)}
                             </select>
                         </div>
                     </div>
@@ -196,31 +279,120 @@ export const AssignmentsTab = () => {
                             <p style={{ color: 'var(--secondary)', fontSize: '14px' }}>No assignments yet. Create the first one.</p>
                         </div>
                     ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            {assignments.map(a => (
-                                <div key={a._id} className="item-card">
-                                    <div>
-                                        <p style={{ fontWeight: 700, fontSize: '14px' }}>
-                                            {a.courseId?.name || '—'}
-                                        </p>
-                                        <p style={{ fontSize: '12px', color: 'var(--secondary)', marginTop: '3px' }}>
-                                            Section: <strong>{a.sectionId?.name || '—'}</strong>
-                                            {a.courseId?.code && <span style={{ marginLeft: '8px' }}>· <span className="mono" style={{ fontSize: '11px' }}>{a.courseId.code}</span></span>}
-                                        </p>
-                                        <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
-                                            {a.theoryTeacherIds?.length > 0 && (
-                                                <span className="chip chip-primary">Theory: {a.theoryTeacherIds.map(t => t.name).join(', ')}</span>
+                        <div className="apple-card no-hover" style={{ overflow: 'hidden', padding: 0 }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '16px' }}>
+                                {displayedAssignments.map(a => (
+                                    <div key={a._id} className="item-card">
+                                        <div>
+                                            <p style={{ fontWeight: 700, fontSize: '14px' }}>
+                                                {a.courseId?.name || '—'}
+                                            </p>
+                                            <p style={{ fontSize: '12px', color: 'var(--secondary)', marginTop: '3px' }}>
+                                                Section: <strong>{a.sectionId?.name || '—'}</strong>
+                                                {a.courseId?.code && <span style={{ marginLeft: '8px' }}>· <span className="mono" style={{ fontSize: '11px' }}>{a.courseId.code}</span></span>}
+                                            </p>
+                                            <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
+                                                {a.theoryTeacherIds?.length > 0 && (
+                                                    <span className="chip chip-primary">Theory: {a.theoryTeacherIds.map(t => t.name).join(', ')}</span>
+                                                )}
+                                                {a.labTeacherIds?.length > 0 && (
+                                                    <span className="chip">Lab: {a.labTeacherIds.map(t => t.name).join(', ')}</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <button className="btn btn-danger btn-icon" onClick={() => deleteAssignment(a._id)} title="Delete assignment">
+                                            <Trash2 size={15} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Pagination Bar */}
+                            {totalPages > 1 && (
+                                <div style={{ 
+                                    padding: '16px 24px', 
+                                    borderTop: '1px solid var(--outline)', 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'space-between',
+                                    background: 'var(--surface-low)'
+                                }}>
+                                    <p style={{ fontSize: '12px', color: 'var(--secondary)', fontWeight: 500 }}>
+                                        Showing page <span style={{ color: 'var(--on-surface)', fontWeight: 600 }}>{currentPage}</span> of <span style={{ color: 'var(--on-surface)', fontWeight: 600 }}>{totalPages}</span>
+                                    </p>
+                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                        <button 
+                                            className="btn btn-secondary" 
+                                            style={{ padding: '6px 12px', fontSize: '12px', borderRadius: '8px' }}
+                                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                            disabled={currentPage === 1}
+                                        >
+                                            Previous
+                                        </button>
+                                        
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            {currentPage > 1 && (
+                                                <button
+                                                    onClick={() => setCurrentPage(currentPage - 1)}
+                                                    style={{
+                                                        width: '28px', height: '28px', borderRadius: '6px', border: 'none',
+                                                        fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+                                                        background: 'transparent', color: 'var(--on-surface-variant)',
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                >
+                                                    {currentPage - 1}
+                                                </button>
                                             )}
-                                            {a.labTeacherIds?.length > 0 && (
-                                                <span className="chip">Lab: {a.labTeacherIds.map(t => t.name).join(', ')}</span>
+
+                                            <input
+                                                type="number"
+                                                value={jumpPage}
+                                                onChange={(e) => setJumpPage(e.target.value)}
+                                                onKeyDown={handleJump}
+                                                onBlur={handleJump}
+                                                style={{
+                                                    width: '36px',
+                                                    height: '28px',
+                                                    borderRadius: '6px',
+                                                    border: '1px solid var(--primary)',
+                                                    background: 'var(--primary)',
+                                                    color: 'white',
+                                                    fontSize: '12px',
+                                                    fontWeight: 700,
+                                                    textAlign: 'center',
+                                                    outline: 'none',
+                                                    appearance: 'none',
+                                                    margin: '0 2px'
+                                                }}
+                                            />
+
+                                            {currentPage < totalPages && (
+                                                <button
+                                                    onClick={() => setCurrentPage(currentPage + 1)}
+                                                    style={{
+                                                        width: '28px', height: '28px', borderRadius: '6px', border: 'none',
+                                                        fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+                                                        background: 'transparent', color: 'var(--on-surface-variant)',
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                >
+                                                    {currentPage + 1}
+                                                </button>
                                             )}
                                         </div>
+
+                                        <button 
+                                            className="btn btn-secondary" 
+                                            style={{ padding: '6px 12px', fontSize: '12px', borderRadius: '8px' }}
+                                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                            disabled={currentPage === totalPages}
+                                        >
+                                            Next
+                                        </button>
                                     </div>
-                                    <button className="btn btn-danger btn-icon" onClick={() => deleteAssignment(a._id)} title="Delete assignment">
-                                        <Trash2 size={15} />
-                                    </button>
                                 </div>
-                            ))}
+                            )}
                         </div>
                     )}
                 </div>

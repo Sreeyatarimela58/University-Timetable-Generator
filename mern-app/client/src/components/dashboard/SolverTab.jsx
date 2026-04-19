@@ -1,40 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import api from '../../api/client';
 import { PreviewGrid } from '../PreviewGrid';
 import './SolverTab.css'; // Import the new custom CSS module
 
 const percent = (val) => `${((val || 0) * 100).toFixed(0)}%`;
 
-const OptionCard = ({ draft, index, isSelected, onSelect }) => {
-    return (
-        <div 
-            onClick={() => onSelect(draft, index)}
-            className={`st-option ${isSelected ? 'active' : 'inactive'}`}
-        >
-            {isSelected && <div className="st-opt-badge">Best Route</div>}
-            
-            <div className="st-opt-head">
-                <div className="st-opt-letter">{String.fromCharCode(65 + index)}</div>
-                <div>
-                    <h3 className="st-opt-title">Option {String.fromCharCode(65 + index)}</h3>
-                    {draft.analytics?.topBottleneck && draft.analytics.topBottleneck !== "None" && (
-                        <p className="st-opt-warn">
-                            <span className="material-symbols-outlined" style={{fontSize: '12px'}}>warning</span>
-                            {draft.analytics.topBottleneck.replace(/([A-Z])/g, ' $1').trim()}
-                        </p>
-                    )}
-                </div>
-            </div>
-            
-            <div className="st-opt-stats">
-                <div className="st-opt-stat">Conf: {percent(draft.summary.confidence)}</div>
-                <div className="st-opt-stat">Spread: {draft.analytics?.slotSpreadScore?.toFixed(2) ?? '—'}</div>
-            </div>
-        </div>
-    );
-};
 
-const AnalyticsPanel = ({ draft, onPublish, index }) => {
+
+const AnalyticsPanel = ({ draft, onPublish, index, published }) => {
     if (!draft) return null;
     const { summary, systemHealth, analytics } = draft;
 
@@ -105,9 +79,14 @@ const AnalyticsPanel = ({ draft, onPublish, index }) => {
                     </div>
                 )}
 
-                <button onClick={onPublish} className="st-btn st-btn-dark" style={{width: '100%', marginTop: 'auto', padding: '20px'}}>
-                    <span className="material-symbols-outlined">task_alt</span>
-                    Finalize Map {String.fromCharCode(65 + index)}
+                <button 
+                    onClick={onPublish} 
+                    disabled={published}
+                    className={`st-btn ${published ? 'st-btn-success' : 'st-btn-dark'}`} 
+                    style={{width: '100%', marginTop: 'auto', padding: '20px'}}
+                >
+                    <span className="material-symbols-outlined">{published ? 'verified' : 'task_alt'}</span>
+                    {published ? `Route ${String.fromCharCode(65 + index)} Published` : `Finalize Map ${String.fromCharCode(65 + index)}`}
                 </button>
             </div>
         </aside>
@@ -115,34 +94,46 @@ const AnalyticsPanel = ({ draft, onPublish, index }) => {
 };
 
 export const SolverTab = () => {
-    const [generating, setGenerating] = useState(false);
+    const {
+        generating, setGenerating,
+        activeGeneration, setActiveGeneration,
+        pendingDraftState, setPendingDraftState,
+        drafts, setDrafts,
+        draftId, setDraftId,
+        selectedDraft, setSelectedDraft,
+        selectedIndex, setSelectedIndex,
+        programs, setPrograms,
+        years, setYears
+    } = useOutletContext();
+
     const [error, setError] = useState('');
-    const [draftId, setDraftId] = useState(null);
-    const [drafts, setDrafts] = useState([]);
-    const [selectedDraft, setSelectedDraft] = useState(null);
-    const [selectedIndex, setSelectedIndex] = useState(null);
     const [publishMsg, setPublishMsg] = useState('');
     const [published, setPublished] = useState(false);
 
-    // Context Loading
-    const [programs, setPrograms] = useState([]);
-    const [years, setYears] = useState([]);
+    // Filter/Selection local state
     const [targetProgram, setTargetProgram] = useState('');
     const [targetYear, setTargetYear] = useState('');
-    const [activeGeneration, setActiveGeneration] = useState(null);
-    const [pendingDraftState, setPendingDraftState] = useState(null);
     const [mode, setMode] = useState("isolated");
     const [viewProgram, setViewProgram] = useState('');
     const [viewYear, setViewYear] = useState('');
     const [activeSectionId, setActiveSectionId] = useState(undefined);
 
-    // Filter years to only those belonging to the selected program
-    const filteredYears = targetProgram
-        ? years.filter(y => y.programId === targetProgram || y.programId?._id === targetProgram)
-        : [];
+    // Filter years to only those belonging to the selected program (now with memoized sorting)
+    const filteredYears = useMemo(() => {
+        if (!targetProgram) return [];
+        return years
+            .filter(y => y.programId === targetProgram || y.programId?._id === targetProgram)
+            .sort((a, b) => (Number(a.yearNumber) || 0) - (Number(b.yearNumber) || 0));
+    }, [years, targetProgram]);
 
     useEffect(() => {
         const fetchFilters = async () => {
+            // Only fetch if context is empty to avoid redundant network calls on tab switch
+            if (programs.length > 0 && years.length > 0) {
+                if (!targetProgram && programs.length > 0) setTargetProgram(programs[0]._id);
+                return;
+            }
+
             try {
                 const [progRes, yearRes, genRes, pendingRes] = await Promise.all([
                     api.get('/programs'),
@@ -151,17 +142,19 @@ export const SolverTab = () => {
                     api.get('/drafts/pending/summary')
                 ]);
                 setPrograms(progRes.data);
-                setYears(yearRes.data);
+                // Sort at the source level for global consistency
+                const sorted = (yearRes.data || []).sort((a, b) => (Number(a.yearNumber) || 0) - (Number(b.yearNumber) || 0));
+                setYears(sorted);
                 setActiveGeneration(genRes.data);
                 setPendingDraftState(pendingRes.data);
                 if (progRes.data.length > 0) setTargetProgram(progRes.data[0]._id);
-                // Don't auto-set year — let user pick after program is selected
             } catch (err) {
                 console.error("Failed to fetch context scopes:", err);
+                setError('Failed to load university context.');
             }
         };
         fetchFilters();
-    }, []);
+    }, [programs.length, years.length, setPrograms, setYears, setActiveGeneration, setPendingDraftState, targetProgram]);
 
     const handleLoadPending = async () => {
         if (!pendingDraftState?.draftId) return;
@@ -248,6 +241,8 @@ export const SolverTab = () => {
         return () => clearInterval(interval);
     }, [draftId, drafts.length, selectedIndex]);
 
+
+
     const handlePublish = async () => {
         if (!selectedDraft || !draftId) return;
         setPublishMsg('');
@@ -256,7 +251,7 @@ export const SolverTab = () => {
             const res = await api.post(`/publish/${draftId}/0`, payload); 
             setPublishMsg(res.data.message || 'Section timetable published successfully!');
             setPublished(true);
-            // Do not clear drafts here so the user can publish other sections if they want.
+            setTimeout(() => setPublishMsg(''), 5000);
         } catch (err) {
             setPublishMsg(err.response?.data?.error || 'Publish failed.');
         }
@@ -524,8 +519,9 @@ export const SolverTab = () => {
                                 />
                             )}
                         </div>
-                        <AnalyticsPanel draft={selectedDraft} index={selectedIndex} onPublish={handlePublish} />
+                        <AnalyticsPanel draft={selectedDraft} index={selectedIndex} onPublish={handlePublish} published={published} />
                     </div>
+
                 </div>
             )}
 

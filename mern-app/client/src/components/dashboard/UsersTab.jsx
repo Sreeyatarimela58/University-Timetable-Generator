@@ -63,6 +63,7 @@ export const UsersTab = () => {
     // Dependent filtering
     const filteredYears = form.programId 
         ? years.filter(y => (y.programId === form.programId || y.programId?._id === form.programId))
+               .sort((a, b) => (Number(a.yearNumber) || 0) - (Number(b.yearNumber) || 0))
         : [];
     
     const filteredSections = form.programId && form.yearId
