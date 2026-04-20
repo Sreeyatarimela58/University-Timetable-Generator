@@ -31,7 +31,7 @@ const CONFIG = {
     SECTIONS_PER_YEAR: 2,
     COURSES_PER_YEAR: 6,
     BASE_SESSIONS_PER_COURSE: 7, // Hours
-    LAB_PROBABILITY: 0.45,       // Hits target utilization more reliably
+    LAB_PROBABILITY: 0.55,       // Hits target utilization more reliably
     TEACHER_COUNT: 35,
     ROOM_COUNT: 25,
     LAB_ROOM_RATIO: 0.28         // 7 labs / 25 total
@@ -98,6 +98,7 @@ const seed = async () => {
                     const course = await Course.create({
                         programId: program._id,
                         yearId: year._id,
+                        yearNumber: yr,
                         name: `${progData.domain} Core ${yr}0${c}`,
                         code: `${progData.domain}-${yr}0${c}`,
                         theoryTotal: 7,
@@ -156,9 +157,7 @@ const seed = async () => {
         }
 
         // Create Admin User
-        const salt = await bcrypt.genSalt(10);
-        const passwordHash = await bcrypt.hash('password123', salt);
-        await User.create({ username: 'admin', password: passwordHash, role: 'admin' });
+        await User.create({ username: 'admin', password: 'password123', role: 'admin' });
 
         mongoose.connection.close();
         process.exit(0);
