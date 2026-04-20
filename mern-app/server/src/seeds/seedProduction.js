@@ -156,9 +156,7 @@ const seed = async () => {
         }
 
         // Create Admin User
-        const salt = await bcrypt.genSalt(10);
-        const passwordHash = await bcrypt.hash('password123', salt);
-        await User.create({ username: 'admin', password: passwordHash, role: 'admin' });
+        await User.create({ username: 'admin', password: 'password123', role: 'admin' });
 
         mongoose.connection.close();
         process.exit(0);
