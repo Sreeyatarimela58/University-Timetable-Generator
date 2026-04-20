@@ -11,6 +11,10 @@ const courseSchema = new mongoose.Schema({
         ref: 'AcademicYear',
         required: true
     },
+    yearNumber: {
+        type: Number,
+        required: true
+    },
     name: {
         type: String,
         required: true,
