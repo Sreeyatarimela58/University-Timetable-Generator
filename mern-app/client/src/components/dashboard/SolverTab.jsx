@@ -109,6 +109,7 @@ export const SolverTab = () => {
     const [error, setError] = useState('');
     const [publishMsg, setPublishMsg] = useState('');
     const [published, setPublished] = useState(false);
+    const [showConfirmDelete, setShowConfirmDelete] = useState(false);
 
     // Filter/Selection local state
     const [targetProgram, setTargetProgram] = useState('');
@@ -176,8 +177,8 @@ export const SolverTab = () => {
         }
     };
 
-    const handleClearPending = async () => {
-        if (!window.confirm('Are you sure you want to clear all pending drafts?')) return;
+    const executeClearPending = async () => {
+        setShowConfirmDelete(false);
         try {
             await api.delete('/drafts/pending/clear');
             setPendingDraftState({ hasPending: false });
@@ -389,7 +390,7 @@ export const SolverTab = () => {
                     </button>
                     
                     {drafts.length > 0 && (
-                        <button onClick={handleClearPending} className="st-btn st-btn-error" style={{ padding: '8px', minWidth: '40px' }} title="Clear Results">
+                        <button onClick={() => setShowConfirmDelete(true)} className="st-btn st-btn-error" style={{ padding: '8px', minWidth: '40px' }} title="Clear Results">
                             <span className="material-symbols-outlined" style={{ margin: 0 }}>delete</span>
                         </button>
                     )}
@@ -444,7 +445,7 @@ export const SolverTab = () => {
                                 <span className="material-symbols-outlined">visibility</span>
                                 View Drafts
                             </button>
-                            <button onClick={handleClearPending} className="st-btn st-btn-error">
+                            <button onClick={() => setShowConfirmDelete(true)} className="st-btn st-btn-error">
                                 <span className="material-symbols-outlined">delete</span>
                                 Discard
                             </button>
@@ -522,6 +523,27 @@ export const SolverTab = () => {
                         <AnalyticsPanel draft={selectedDraft} index={selectedIndex} onPublish={handlePublish} published={published} />
                     </div>
 
+                </div>
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {showConfirmDelete && (
+                <div className="st-modal-overlay">
+                    <div className="st-modal-content">
+                        <div className="st-modal-header">
+                            <h3 className="st-modal-title">Discard Drafts</h3>
+                            <button className="st-icon-btn" onClick={() => setShowConfirmDelete(false)}>
+                                <span className="material-symbols-outlined">close</span>
+                            </button>
+                        </div>
+                        <div className="st-modal-body">
+                            <p>Are you sure you want to discard all pending drafts? This action cannot be undone.</p>
+                        </div>
+                        <div className="st-modal-footer">
+                            <button className="st-btn st-btn-dark" onClick={() => setShowConfirmDelete(false)}>Cancel</button>
+                            <button className="st-btn st-btn-error" onClick={executeClearPending}>Discard</button>
+                        </div>
+                    </div>
                 </div>
             )}
 
