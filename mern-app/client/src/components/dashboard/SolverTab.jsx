@@ -389,7 +389,7 @@ export const SolverTab = () => {
                         )}
                     </button>
                     
-                    {drafts.length > 0 && (
+                    {(drafts.length > 0 || pendingDraftState?.hasPending) && (
                         <button onClick={() => setShowConfirmDelete(true)} className="st-btn st-btn-error" style={{ padding: '8px', minWidth: '40px' }} title="Clear Results">
                             <span className="material-symbols-outlined" style={{ margin: 0 }}>delete</span>
                         </button>
